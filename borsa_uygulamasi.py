@@ -13,7 +13,7 @@ st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_s
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 
-# Supabase Bağlantısı (Secrets'tan şifreleri çeker)
+# Supabase Bağlantısı
 @st.cache_resource
 def supabase_baglan():
     try:
@@ -45,21 +45,41 @@ ingilizce_turkce_sozluk = {
     "Stockholders Equity": "Özkaynaklar", "Cash And Cash Equivalents": "Nakit"
 }
 
-# --- 3. FONKSİYONLAR (GİZLİ MOTORLAR) ---
-@st.cache_data(ttl=60)
+# --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI (ANTI-BAN SİSTEMİ) ---
+# Verileri 15 dakika (900 saniye) hafızada tutarak Yahoo'nun engellemesini önler
+@st.cache_data(ttl=900)
 def veri_motoru(sembol):
     h = yf.Ticker(sembol)
-    df = h.history(period="2y")
-    df_endeks = yf.Ticker("XU100.IS").history(period="2y")
-    ham_gelir = h.financials
-    ham_bilanco = h.balance_sheet
-    gelir = ham_gelir[ham_gelir.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_gelir is not None else pd.DataFrame()
-    bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
+    
+    try: df = h.history(period="2y")
+    except: df = pd.DataFrame()
+    
+    try: df_endeks = yf.Ticker("XU100.IS").history(period="2y")
+    except: df_endeks = pd.DataFrame()
+    
+    try:
+        ham_gelir = h.financials
+        gelir = ham_gelir[ham_gelir.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_gelir is not None else pd.DataFrame()
+    except: gelir = pd.DataFrame()
+        
+    try:
+        ham_bilanco = h.balance_sheet
+        bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
+    except: bilanco = pd.DataFrame()
     
     try: haberler = h.news
     except: haberler = []
     
-    return h.info, df, df_endeks, gelir, bilanco, haberler
+    try: bilgi = h.info
+    except: bilgi = {}
+    
+    return bilgi, df, df_endeks, gelir, bilanco, haberler
+
+@st.cache_data(ttl=900)
+def watchlist_verisi_getir(sembol):
+    # Watchlist için sadece çok hafif bir veri çekiyoruz
+    df = yf.Ticker(sembol).history(period="5d")
+    return df
 
 def ai_bilanco_yorumu(bilgi):
     yorumlar = []
@@ -70,7 +90,7 @@ def ai_bilanco_yorumu(bilgi):
         yorumlar.append("🟢 **Borçluluk:** Kısa vadeli nakit durumu güçlü." if cari >= 1.5 else "🔴 **Borçluluk:** Nakit akışı ve borç ödeme kapasitesi sınırda.")
     if marj:
         yorumlar.append("🟢 **Karlılık:** Kar marjı sağlıklı (%15+)." if marj > 0.15 else "🔴 **Karlılık:** Kar marjı düşük, kasaya az nakit giriyor.")
-    return yorumlar if yorumlar else ["Yeterli veri bulunamadı."]
+    return yorumlar if yorumlar else ["Veri kısıtlaması nedeniyle AI yorumu üretilemedi."]
 
 def duygu_analizi(metin):
     metin = str(metin).lower()
@@ -90,9 +110,6 @@ def footer_ekle():
 
 # --- 4. SAYFA TASARIMLARI ---
 
-# ==========================================
-# SAYFA 1: ANA SAYFA & GİRİŞ (VERİTABANI AKTİF)
-# ==========================================
 if sayfa == "🏠 Ana Sayfa & Giriş":
     st.title("Vader Analiz Dünyasına Hoş Geldiniz")
     st.markdown("Borsa İstanbul analizi için geliştirilmiş en kapsamlı yerli terminal.")
@@ -107,7 +124,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
             log_pw = st.text_input("Şifre", type="password", key="log_pw")
             if st.button("Giriş Yap"):
                 try:
-                    # Supabase'e giriş isteği gönder
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
@@ -121,7 +137,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
             reg_pw = st.text_input("Yeni Şifre (En az 6 hane)", type="password", key="reg_pw")
             if st.button("Üyeliği Tamamla"):
                 try:
-                    # Supabase'e kayıt isteği gönder
                     response = supabase.auth.sign_up({"email": reg_mail, "password": reg_pw})
                     st.success("Kayıt başarılı! Şimdi sol taraftan giriş yapabilirsiniz.")
                 except Exception as e:
@@ -134,9 +149,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
     st.warning("Tüm analiz araçlarını sol menüdeki 'Canlı Analiz Terminali' sekmesinden ücretsiz kullanabilirsiniz. Portföy kaydı için giriş yapmanız gereklidir.")
     footer_ekle()
 
-# ==========================================
-# SAYFA 2: CANLI ANALİZ TERMİNALİ (BÜTÜN ÖZELLİKLER BURADA)
-# ==========================================
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
     sembol = hisse_kod + ".IS"
@@ -244,7 +256,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t4:
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
-                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 gün için tahmini fiyat rotası simüle edilmiştir. *(Yatırım tavsiyesi değildir)*")
+                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 gün için tahmini fiyat rotası simüle edilmiştir.")
                 
                 log_returns = np.log(1 + df['Close'].pct_change())
                 u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
@@ -274,23 +286,15 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 else:
                     st.error("EPS verisi eksik olduğu için hesaplanamıyor.")
 
-                yatirim = st.slider("1 Yıl Önce Ne Kadar Yatırsaydım:", 1000, 1000000, 10000, 1000)
-                gecmis_fiyat = df['Close'].iloc[-252] if len(df) >= 252 else df['Close'].iloc[0]
-                bugunku_deger = (yatirim / gecmis_fiyat) * fiyat
-                st.success(f"1 yıl önce **₺{gecmis_fiyat:.2f}** fiyattan alınan hisselerin bugünkü değeri: **₺{bugunku_deger:,.2f}**")
-
             with t5:
                 st.subheader("📰 Son Dakika Haberleri & Algoritmik Duygu Analizi")
-                st.markdown("Uluslararası/Yerel ajanslardan çekilen haber başlıkları ve kelime bazlı psikolojik etki skoru:")
                 if haberler:
                     for haber in haberler[:5]:
                         baslik = haber.get('title', 'Başlık Yok')
                         link = haber.get('link', '#')
-                        yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
                         duygu = duygu_analizi(baslik)
-                        
-                        with st.expander(f"{duygu} | {baslik} ({yayin})"):
-                            st.write(f"Haberin tamamını oku: [Bağlantıya Git]({link})")
+                        with st.expander(f"{duygu} | {baslik}"):
+                            st.write(f"[Haberi Oku]({link})")
                 else:
                     st.info("Bu şirket için güncel haber verisi bulunamadı.")
 
@@ -302,13 +306,12 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     st.download_button("📥 Bilançoyu İndir (CSV)", bilanco.to_csv(encoding='utf-8-sig'), f"{hisse_kod}_bilanco.csv", "text/csv")
                 else:
                     st.info("Veri yok.")
+        else:
+            st.error("Hisse verisi çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması devam ediyor (Lütfen birkaç dakika bekleyin).")
     except Exception as e:
-        st.error(f"Hisse verisi çekilemedi. Detay: {e}")
+        st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# ==========================================
-# SAYFA 3: PORTFÖYÜM & TAKİP (ÜYELERE ÖZEL)
-# ==========================================
 elif sayfa == "💼 Portföyüm & Takip":
     st.title("💼 Şahsi Portföy & İzleme Listesi")
     
@@ -323,9 +326,12 @@ elif sayfa == "💼 Portföyüm & Takip":
         
         if maliyet > 0 and lot > 0:
             try:
-                anlik = yf.Ticker(h_kod).history(period="1d")['Close'].iloc[-1]
-                kar_zarar = (anlik * lot) - (maliyet * lot)
-                st.success(f"Güncel Değer: ₺{anlik * lot:,.2f} | Net Kar/Zarar: ₺{kar_zarar:,.2f}")
+                # Hafif veri çekimi
+                anlik_df = watchlist_verisi_getir(h_kod)
+                if not anlik_df.empty:
+                    anlik = anlik_df['Close'].iloc[-1]
+                    kar_zarar = (anlik * lot) - (maliyet * lot)
+                    st.success(f"Güncel Değer: ₺{anlik * lot:,.2f} | Net Kar/Zarar: ₺{kar_zarar:,.2f}")
             except:
                 st.error("Hisse bulunamadı.")
                 
@@ -337,19 +343,17 @@ elif sayfa == "💼 Portföyüm & Takip":
         cols = st.columns(len(favoriler) if len(favoriler) > 0 else 1)
         for idx, fav_sembol in enumerate(favoriler):
             try:
-                fav_df = yf.Ticker(fav_sembol).history(period="5d")
-                fav_fiyat = fav_df['Close'].iloc[-1]
-                fav_onceki = fav_df['Close'].iloc[-2]
-                fav_yuzde = ((fav_fiyat - fav_onceki) / fav_onceki) * 100
-                with cols[idx % len(cols)]:
-                    st.metric(fav_sembol.replace('.IS', ''), f"₺{fav_fiyat:,.2f}", f"{fav_yuzde:+.2f}%")
+                fav_df = watchlist_verisi_getir(fav_sembol)
+                if not fav_df.empty:
+                    fav_fiyat = fav_df['Close'].iloc[-1]
+                    fav_onceki = fav_df['Close'].iloc[-2] if len(fav_df) > 1 else fav_fiyat
+                    fav_yuzde = ((fav_fiyat - fav_onceki) / fav_onceki) * 100 if fav_onceki > 0 else 0
+                    with cols[idx % len(cols)]:
+                        st.metric(fav_sembol.replace('.IS', ''), f"₺{fav_fiyat:,.2f}", f"{fav_yuzde:+.2f}%")
             except:
                 pass
     footer_ekle()
 
-# ==========================================
-# SAYFA 4: HAKKIMDA & İLETİŞİM
-# ==========================================
 elif sayfa == "📩 Hakkımda & İletişim":
     st.title("👨‍💻 Geliştirici Hakkında")
     
