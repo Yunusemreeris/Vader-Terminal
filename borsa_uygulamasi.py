@@ -4,12 +4,36 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
+from supabase import create_client, Client
 
-# --- 1. SİTE KONFİGÜRASYONU ---
+# --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
+
+# Oturum Yönetimi (Kullanıcı Giriş Yaptı mı?)
+if 'kullanici' not in st.session_state:
+    st.session_state.kullanici = None
+
+# Supabase Bağlantısı (Secrets'tan şifreleri çeker)
+@st.cache_resource
+def supabase_baglan():
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        return None
+
+supabase = supabase_baglan()
 
 # --- 2. PROFESYONEL NAVİGASYON MENÜSÜ ---
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
+
+if st.session_state.kullanici:
+    st.sidebar.success(f"👤 Aktif Kullanıcı:\n{st.session_state.kullanici}")
+    if st.sidebar.button("🚪 Çıkış Yap"):
+        st.session_state.kullanici = None
+        st.rerun()
+
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", ["🏠 Ana Sayfa & Giriş", "📈 Canlı Analiz Terminali", "💼 Portföyüm & Takip", "📩 Hakkımda & İletişim"])
 
 st.sidebar.markdown("---")
@@ -32,7 +56,6 @@ def veri_motoru(sembol):
     gelir = ham_gelir[ham_gelir.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_gelir is not None else pd.DataFrame()
     bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
     
-    # Haberleri Çekme (Hata verirse boş liste döner)
     try: haberler = h.news
     except: haberler = []
     
@@ -51,11 +74,11 @@ def ai_bilanco_yorumu(bilgi):
 
 def duygu_analizi(metin):
     metin = str(metin).lower()
-    pozitif_kelimeler = ['artış', 'kâr', 'büyüme', 'anlaşma', 'yükseliş', 'pozitif', 'up', 'profit', 'growth', 'dividend', 'success']
-    negatif_kelimeler = ['zarar', 'düşüş', 'ceza', 'risk', 'negatif', 'down', 'loss', 'penalty', 'debt', 'fail']
+    poz_kelimeler = ['artış', 'kâr', 'büyüme', 'anlaşma', 'yükseliş', 'pozitif', 'up', 'profit', 'growth', 'dividend', 'success']
+    neg_kelimeler = ['zarar', 'düşüş', 'ceza', 'risk', 'negatif', 'down', 'loss', 'penalty', 'debt', 'fail']
     
-    poz_skor = sum(1 for k in pozitif_kelimeler if k in metin)
-    neg_skor = sum(1 for k in negatif_kelimeler if k in metin)
+    poz_skor = sum(1 for k in poz_kelimeler if k in metin)
+    neg_skor = sum(1 for k in neg_kelimeler if k in metin)
     
     if poz_skor > neg_skor: return "🟢 Pozitif Etki"
     elif neg_skor > poz_skor: return "🔴 Negatif Etki"
@@ -63,38 +86,56 @@ def duygu_analizi(metin):
 
 def footer_ekle():
     st.markdown("---")
-    # BURASI GÜNCELLENDİ: Senin ismin eklendi.
     st.markdown(f"<p style='text-align: center; color: gray;'>Copyright © {datetime.now().year} Yunus Emre Eriş - Vader Analiz Terminali | Tüm Hakları Saklıdır.</p>", unsafe_allow_html=True)
 
 # --- 4. SAYFA TASARIMLARI ---
 
 # ==========================================
-# SAYFA 1: ANA SAYFA & GİRİŞ
+# SAYFA 1: ANA SAYFA & GİRİŞ (VERİTABANI AKTİF)
 # ==========================================
 if sayfa == "🏠 Ana Sayfa & Giriş":
     st.title("Vader Analiz Dünyasına Hoş Geldiniz")
     st.markdown("Borsa İstanbul analizi için geliştirilmiş en kapsamlı yerli terminal.")
     
-    col_login, col_reg = st.columns(2)
-    with col_login:
-        st.subheader("🔑 Üye Girişi")
-        user = st.text_input("Kullanıcı Adı veya E-posta")
-        pw = st.text_input("Şifre", type="password")
-        if st.button("Giriş Yap"): st.success(f"Hoş geldin {user}! (Supabase bağlantısı bekleniyor...)")
-            
-    with col_reg:
-        st.subheader("📝 Kayıt Ol")
-        new_user = st.text_input("Ad Soyad")
-        new_mail = st.text_input("E-posta Adresi")
-        new_pw = st.text_input("Yeni Şifre", type="password")
-        if st.button("Üyeliği Tamamla"): st.info("Kayıt talebiniz alındı. Veritabanı entegrasyonu aktif edildiğinde onaylanacaktır.")
+    if supabase is None:
+        st.error("Veritabanı bağlantısı kurulamadı. Lütfen Streamlit Secrets ayarlarını kontrol edin.")
+    elif st.session_state.kullanici is None:
+        col_login, col_reg = st.columns(2)
+        with col_login:
+            st.subheader("🔑 Üye Girişi")
+            log_mail = st.text_input("E-posta", key="log_mail")
+            log_pw = st.text_input("Şifre", type="password", key="log_pw")
+            if st.button("Giriş Yap"):
+                try:
+                    # Supabase'e giriş isteği gönder
+                    response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
+                    st.session_state.kullanici = response.user.email
+                    st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
+                    st.rerun()
+                except Exception as e:
+                    st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
+                
+        with col_reg:
+            st.subheader("📝 Yeni Kayıt Ol")
+            reg_mail = st.text_input("E-posta Adresi", key="reg_mail")
+            reg_pw = st.text_input("Yeni Şifre (En az 6 hane)", type="password", key="reg_pw")
+            if st.button("Üyeliği Tamamla"):
+                try:
+                    # Supabase'e kayıt isteği gönder
+                    response = supabase.auth.sign_up({"email": reg_mail, "password": reg_pw})
+                    st.success("Kayıt başarılı! Şimdi sol taraftan giriş yapabilirsiniz.")
+                except Exception as e:
+                    st.error(f"Kayıt hatası: Şifre çok kısa olabilir veya bu e-posta zaten kayıtlı.")
+    else:
+        st.success(f"Sisteme başarıyla giriş yaptınız: **{st.session_state.kullanici}**")
+        st.info("Sol menüden analiz araçlarını kullanmaya başlayabilirsiniz.")
 
     st.markdown("### 📢 Duyurular")
-    st.warning("Tüm analiz araçlarını sol menüdeki 'Canlı Analiz Terminali' sekmesinden ücretsiz kullanabilirsiniz.")
+    st.warning("Tüm analiz araçlarını sol menüdeki 'Canlı Analiz Terminali' sekmesinden ücretsiz kullanabilirsiniz. Portföy kaydı için giriş yapmanız gereklidir.")
     footer_ekle()
 
 # ==========================================
-# SAYFA 2: CANLI ANALİZ TERMİNALİ
+# SAYFA 2: CANLI ANALİZ TERMİNALİ (BÜTÜN ÖZELLİKLER BURADA)
 # ==========================================
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
@@ -120,7 +161,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("F/K Oranı", round(bilgi.get('trailingPE', 0), 2) if bilgi.get('trailingPE') else "N/A")
             m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}")
 
-            # 6 DEV SEKME
             t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Gelişmiş Grafikler", "⚙️ Al-Sat Robotu", "🤖 AI Yorum & Sağlık", "🎯 Değerleme & Tahmin", "📰 Haberler & Duygu", "📑 Finansallar"])
             
             with t1:
@@ -129,7 +169,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 goster_rsi = st.checkbox("RSI (Göreceli Güç Endeksi) Göster")
                 goster_macd = st.checkbox("MACD (Trend Göstergesi) Göster")
                 
-                # Bollinger Hesabı
                 if goster_bollinger:
                     df['SMA20_B'] = df['Close'].rolling(20).mean()
                     df['STD20_B'] = df['Close'].rolling(20).std()
@@ -146,7 +185,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 fig.update_layout(title="Ana Fiyat Grafiği", template=tema, height=450, hovermode="x unified")
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # RSI Grafiği
                 if goster_rsi:
                     delta = df['Close'].diff()
                     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -161,7 +199,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     fig_rsi.update_layout(title="RSI İndikatörü", template=tema, height=250)
                     st.plotly_chart(fig_rsi, use_container_width=True)
 
-                # MACD Grafiği
                 if goster_macd:
                     exp1 = df['Close'].ewm(span=12, adjust=False).mean()
                     exp2 = df['Close'].ewm(span=26, adjust=False).mean()
@@ -270,50 +307,52 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     footer_ekle()
 
 # ==========================================
-# SAYFA 3: PORTFÖYÜM & TAKİP
+# SAYFA 3: PORTFÖYÜM & TAKİP (ÜYELERE ÖZEL)
 # ==========================================
 elif sayfa == "💼 Portföyüm & Takip":
     st.title("💼 Şahsi Portföy & İzleme Listesi")
     
-    st.subheader("📊 Anlık Kar/Zarar Hesaplayıcı")
-    h_kod = st.text_input("Portföyünüzdeki Hisse Kodu:", "THYAO").upper() + ".IS"
-    col_p1, col_p2 = st.columns(2)
-    maliyet = col_p1.number_input("Maliyetiniz", min_value=0.0, step=1.0)
-    lot = col_p2.number_input("Adet (Lot)", min_value=0, step=1)
-    
-    if maliyet > 0 and lot > 0:
-        try:
-            anlik = yf.Ticker(h_kod).history(period="1d")['Close'].iloc[-1]
-            kar_zarar = (anlik * lot) - (maliyet * lot)
-            st.success(f"Güncel Değer: ₺{anlik * lot:,.2f} | Net Kar/Zarar: ₺{kar_zarar:,.2f}")
-        except:
-            st.error("Hisse bulunamadı.")
-            
-    st.markdown("---")
-    st.subheader("📋 Canlı İzleme Listesi")
-    favs = st.text_input("Takip ettiğiniz hisseler (Virgülle ayırın):", "SASA, EREGL, FROTO")
-    favoriler = [x.strip().upper() + ".IS" for x in favs.split(",") if x.strip()]
-    
-    cols = st.columns(len(favoriler) if len(favoriler) > 0 else 1)
-    for idx, fav_sembol in enumerate(favoriler):
-        try:
-            fav_df = yf.Ticker(fav_sembol).history(period="5d")
-            fav_fiyat = fav_df['Close'].iloc[-1]
-            fav_onceki = fav_df['Close'].iloc[-2]
-            fav_yuzde = ((fav_fiyat - fav_onceki) / fav_onceki) * 100
-            with cols[idx % len(cols)]:
-                st.metric(fav_sembol.replace('.IS', ''), f"₺{fav_fiyat:,.2f}", f"{fav_yuzde:+.2f}%")
-        except:
-            pass
+    if st.session_state.kullanici is None:
+        st.warning("Bu sayfayı görüntülemek ve kendi portföyünüzü oluşturmak için lütfen Ana Sayfa üzerinden giriş yapın veya kayıt olun.")
+    else:
+        st.subheader("📊 Anlık Kar/Zarar Hesaplayıcı")
+        h_kod = st.text_input("Portföyünüzdeki Hisse Kodu:", "THYAO").upper() + ".IS"
+        col_p1, col_p2 = st.columns(2)
+        maliyet = col_p1.number_input("Maliyetiniz", min_value=0.0, step=1.0)
+        lot = col_p2.number_input("Adet (Lot)", min_value=0, step=1)
+        
+        if maliyet > 0 and lot > 0:
+            try:
+                anlik = yf.Ticker(h_kod).history(period="1d")['Close'].iloc[-1]
+                kar_zarar = (anlik * lot) - (maliyet * lot)
+                st.success(f"Güncel Değer: ₺{anlik * lot:,.2f} | Net Kar/Zarar: ₺{kar_zarar:,.2f}")
+            except:
+                st.error("Hisse bulunamadı.")
+                
+        st.markdown("---")
+        st.subheader("📋 Canlı İzleme Listesi")
+        favs = st.text_input("Takip ettiğiniz hisseler (Virgülle ayırın):", "SASA, EREGL, FROTO")
+        favoriler = [x.strip().upper() + ".IS" for x in favs.split(",") if x.strip()]
+        
+        cols = st.columns(len(favoriler) if len(favoriler) > 0 else 1)
+        for idx, fav_sembol in enumerate(favoriler):
+            try:
+                fav_df = yf.Ticker(fav_sembol).history(period="5d")
+                fav_fiyat = fav_df['Close'].iloc[-1]
+                fav_onceki = fav_df['Close'].iloc[-2]
+                fav_yuzde = ((fav_fiyat - fav_onceki) / fav_onceki) * 100
+                with cols[idx % len(cols)]:
+                    st.metric(fav_sembol.replace('.IS', ''), f"₺{fav_fiyat:,.2f}", f"{fav_yuzde:+.2f}%")
+            except:
+                pass
     footer_ekle()
 
 # ==========================================
-# SAYFA 4: HAKKIMDA & İLETİŞİM (GÜNCELLENDİ)
+# SAYFA 4: HAKKIMDA & İLETİŞİM
 # ==========================================
 elif sayfa == "📩 Hakkımda & İletişim":
     st.title("👨‍💻 Geliştirici Hakkında")
     
-    # BURASI GÜNCELLENDİ: Senin ismin ve e-postan eklendi.
     st.markdown(f"""
     **Vader Analiz Terminali**, Bursa Uludağ Üniversitesi İİBF öğrencisi **Yunus Emre Eriş** tarafından geliştirilmiş profesyonel bir borsa analiz projesidir.
     
