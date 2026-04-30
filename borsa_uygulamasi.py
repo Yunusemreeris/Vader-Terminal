@@ -9,32 +9,31 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
-import time  # YENİ: Zamanlama kalkanı için eklendi
 
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# --- KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
-if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies")
-cookie_manager = st.session_state.cookie_manager
+# --- 2. KUSURSUZ ÇEREZ YÖNETİCİSİ VE GECİKME AVCISI ---
+cookie_manager = stx.CookieManager()
 
-# --- HAYAT KURTARAN YÜKLEME EKRANI (RACE CONDITION ÇÖZÜMÜ) ---
-# Sayfa yenilendiğinde Python'un tarayıcıyı beklemesi için yarım saniyelik bir kalkan oluşturuyoruz.
-if 'cerez_kontrol_edildi' not in st.session_state:
-    st.session_state.cerez_kontrol_edildi = True
-    with st.spinner("🔐 Güvenli oturum kontrol ediliyor, lütfen bekleyin..."):
-        time.sleep(0.6)  # Tarayıcının çerezleri göndermesi için tanınan süre
-    st.rerun()           # Çerezler geldikten sonra sayfayı görünmez şekilde yenile
-
-kayitli_mail = cookie_manager.get(cookie="vader_mail")
-kayitli_id = cookie_manager.get(cookie="vader_id")
-
-# Oturum Yönetimi
+# Oturum durumlarını en baştan tanımla
 if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
+    st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = kayitli_id if kayitli_id else None
+    st.session_state.user_id = None
+if 'manuel_cikis' not in st.session_state:
+    st.session_state.manuel_cikis = False
+
+# Tarayıcıdan gelen çerezi al (Bu işlem 1 saniye geçikmeli gelebilir)
+kayitli_mail = cookie_manager.get("vader_mail")
+kayitli_id = cookie_manager.get("vader_id")
+
+# BİNG! İŞTE KUSURSUZ ALGORİTMA:
+# Eğer oturum boş görünüyorsa AMA tarayıcı sonradan çerezi gönderdiyse ve adam kendi eliyle çıkış yapmadıysa; anında içeri al!
+if st.session_state.kullanici is None and kayitli_mail is not None and not st.session_state.manuel_cikis:
+    st.session_state.kullanici = kayitli_mail
+    st.session_state.user_id = kayitli_id
+    st.rerun()
 
 # Supabase Bağlantısı
 @st.cache_resource
@@ -48,7 +47,7 @@ def supabase_baglan():
 
 supabase = supabase_baglan()
 
-# --- 2. PROFESYONEL NAVİGASYON MENÜSÜ ---
+# --- 3. PROFESYONEL NAVİGASYON MENÜSÜ ---
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
@@ -58,7 +57,7 @@ if st.session_state.kullanici:
         cookie_manager.delete("vader_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        time.sleep(0.5) # Çerezlerin silinmesi için zaman tanı
+        st.session_state.manuel_cikis = True # Otomatik girişi kilitle
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -92,7 +91,7 @@ def rakam_formatla(deger):
     except:
         return deger
 
-# --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI ---
+# --- 4. GÜÇLENDİRİLMİŞ VERİ MOTORLARI ---
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
@@ -181,7 +180,7 @@ def footer_ekle():
     st.markdown(f"<p style='text-align: center; color: gray;'>Copyright © {datetime.now().year} Yunus Emre Eriş - Vader Analiz Terminali | Tüm Hakları Saklıdır.</p>", unsafe_allow_html=True)
 
 
-# --- 4. SAYFA TASARIMLARI ---
+# --- 5. SAYFA TASARIMLARI ---
 
 if sayfa == "🏠 Ana Sayfa & Giriş":
     st.title("Vader Analiz Dünyasına Hoş Geldiniz")
@@ -200,12 +199,12 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
+                    st.session_state.manuel_cikis = False # Yeni girişte kilidi aç
                     
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000)
                     
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
-                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
                     st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
