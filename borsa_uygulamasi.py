@@ -8,25 +8,25 @@ from supabase import create_client, Client
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
-import extra_streamlit_components as stx  # YENİ: Çerez Yönetici Kütüphanesi
+import extra_streamlit_components as stx
 
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# --- YENİ: ÇEREZ (COOKIE) YÖNETİCİSİ (HATA GİDERİLDİ) ---
-if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager()
-cookie_manager = st.session_state.cookie_manager
-
-# Cookie'den veriyi al (Beni Hatırla Sistemi)
-kayitli_mail = cookie_manager.get(cookie="vader_mail")
-kayitli_id = cookie_manager.get(cookie="vader_id")
-
 # Oturum Yönetimi (Kullanıcı Giriş Yaptı mı?)
 if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
+    st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = kayitli_id if kayitli_id else None
+    st.session_state.user_id = None
+
+# --- YENİ: KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
+cookie_manager = stx.CookieManager(key="vader_cookies")
+
+# Zamanlama Kalkanı: Eğer çerez varsa ama oturum kapalıysa, sessizce giriş yap ve sayfayı yenile.
+if cookie_manager.get("vader_mail") is not None and st.session_state.kullanici is None:
+    st.session_state.kullanici = cookie_manager.get("vader_mail")
+    st.session_state.user_id = cookie_manager.get("vader_id")
+    st.rerun()
 
 # Supabase Bağlantısı
 @st.cache_resource
@@ -192,9 +192,9 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
                     
-                    # YENİ: Başarılı girişte bilgileri Cookie'ye kaydet (30 Gün Geçerli)
-                    cookie_manager.set("vader_mail", response.user.email, expires_at=datetime.now() + timedelta(days=30))
-                    cookie_manager.set("vader_id", response.user.id, expires_at=datetime.now() + timedelta(days=30))
+                    # YENİ: Başarılı girişte bilgileri 30 Günlük olarak Cookie'ye kaydet (2592000 saniye)
+                    cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
+                    cookie_manager.set("vader_id", response.user.id, max_age=2592000)
                     
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
                     st.rerun()
