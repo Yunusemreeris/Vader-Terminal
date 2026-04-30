@@ -49,7 +49,6 @@ ingilizce_turkce_sozluk = {
 }
 
 # --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI (ANTI-BAN SİSTEMİ) ---
-# DAKİKALIK GÜNCELLEME İÇİN SÜRE 5 DAKİKAYA (300sn) İNDİRİLDİ
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
@@ -160,7 +159,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
     sembol = hisse_kod + ".IS"
     
-    # EKLENEN KISIM: ZAMAN DİLİMİ SEÇİCİ
     zaman_secimi = st.sidebar.selectbox(
         "Grafik Zaman Dilimi:", 
         ["Günlük (Son 2 Yıl)", "Saatlik (Son 1 Ay)", "15 Dakikalık (Son 5 Gün)", "5 Dakikalık (Son 5 Gün)", "1 Dakikalık (Son 1 Gün)"]
@@ -179,7 +177,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        # p ve i (period ve interval) değişkenleri veri motoruna gönderiliyor
         bilgi, df, df_endeks, gelir, bilanco, haberler = veri_motoru(sembol, p, i)
         if not df.empty:
             fiyat = bilgi.get('currentPrice', df['Close'].iloc[-1])
@@ -194,7 +191,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("F/K Oranı", round(bilgi.get('trailingPE', 0), 2) if bilgi.get('trailingPE') else "N/A")
             m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}")
 
-            # 6 DEV SEKME (HİÇBİRİ SİLİNMEDİ)
             t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Gelişmiş Grafikler", "⚙️ Al-Sat Robotu", "🤖 AI Yorum & Sağlık", "🎯 Değerleme & Tahmin", "📰 Haberler & Duygu", "📑 Finansallar"])
             
             with t1:
@@ -278,24 +274,32 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t4:
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
-                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 periyot (seçilen zaman dilimine göre) için tahmini fiyat rotası simüle edilmiştir.")
+                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 periyot için tahmini fiyat rotası simüle edilmiştir.")
                 
                 log_returns = np.log(1 + df['Close'].pct_change())
                 u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
                 drift = u - (0.5 * var)
                 
                 gun = 30
+                
+                # TUTARLILIK GÜNCELLEMESİ: Hissenin anlık fiyatına (kuruşuna kadar) göre sabit bir tohum belirliyoruz.
+                # Böylece sayfa her yenilendiğinde değil, sadece hisse fiyatı değiştiğinde grafik yeniden şekillenir.
+                np.random.seed(int(fiyat * 100))
+                
                 tahmin_getiri = np.exp(drift + stdev * np.random.standard_normal(gun))
                 tahmin_fiyat = np.zeros_like(tahmin_getiri)
                 tahmin_fiyat[0] = fiyat
                 for t in range(1, gun): tahmin_fiyat[t] = tahmin_fiyat[t - 1] * tahmin_getiri[t]
+                
+                # Diğer olası rastgelelikleri bozmamak için tohumu (seed) serbest bırakıyoruz
+                np.random.seed()
                 
                 gelecek_tarihler = pd.date_range(start=df.index[-1], periods=gun)
                 
                 fig_mc = go.Figure()
                 fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Geçmiş Fiyat'))
                 fig_mc.add_trace(go.Scatter(x=gelecek_tarihler, y=tahmin_fiyat, line=dict(color='#00FFCC', width=2, dash='dot'), name='AI Tahmini (30 Periyot)'))
-                fig_mc.update_layout(template=tema, height=350, title="30 Periyotluk Matematiksel Projeksiyon")
+                fig_mc.update_layout(template=tema, height=350, title="30 Periyotluk Matematiksel Projeksiyon (Tutarlı)")
                 st.plotly_chart(fig_mc, use_container_width=True)
                 
                 st.markdown("---")
