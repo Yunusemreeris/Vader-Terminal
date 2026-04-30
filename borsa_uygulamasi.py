@@ -9,33 +9,32 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
+import time  # YENİ: Zamanlama kalkanı için eklendi
 
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# --- KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ VE SESSİZ GİRİŞ SİSTEMİ ---
+# --- KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
 if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager()
+    st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies")
 cookie_manager = st.session_state.cookie_manager
 
-# Oturum durumlarını en baştan oluştur
-if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = None
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'cikis_basildi' not in st.session_state:
-    st.session_state.cikis_basildi = False
+# --- HAYAT KURTARAN YÜKLEME EKRANI (RACE CONDITION ÇÖZÜMÜ) ---
+# Sayfa yenilendiğinde Python'un tarayıcıyı beklemesi için yarım saniyelik bir kalkan oluşturuyoruz.
+if 'cerez_kontrol_edildi' not in st.session_state:
+    st.session_state.cerez_kontrol_edildi = True
+    with st.spinner("🔐 Güvenli oturum kontrol ediliyor, lütfen bekleyin..."):
+        time.sleep(0.6)  # Tarayıcının çerezleri göndermesi için tanınan süre
+    st.rerun()           # Çerezler geldikten sonra sayfayı görünmez şekilde yenile
 
-# Tarayıcıdan gelen çerez verilerini al (Gecikmeli gelse bile)
 kayitli_mail = cookie_manager.get(cookie="vader_mail")
 kayitli_id = cookie_manager.get(cookie="vader_id")
 
-# BİNG! SESSİZ GİRİŞ ALGORİTMASI:
-# Eğer adam manuel olarak çıkış tuşuna basmamışsa AMA tarayıcısından çerez geldiyse, anında içeri al!
-if kayitli_mail is not None and st.session_state.kullanici is None and not st.session_state.cikis_basildi:
-    st.session_state.kullanici = kayitli_mail
-    st.session_state.user_id = kayitli_id
-    st.rerun() # Çerezi algıladığı an sayfayı senin yerine yeniler ve analiz terminaline atar.
+# Oturum Yönetimi
+if 'kullanici' not in st.session_state:
+    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = kayitli_id if kayitli_id else None
 
 # Supabase Bağlantısı
 @st.cache_resource
@@ -55,12 +54,11 @@ st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER
 if st.session_state.kullanici:
     st.sidebar.success(f"👤 Aktif Kullanıcı:\n{st.session_state.kullanici}")
     if st.sidebar.button("🚪 Çıkış Yap"):
-        # Çıkış yaparken çerezleri sil ve sessiz girişi kilitle
         cookie_manager.delete("vader_mail")
         cookie_manager.delete("vader_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        st.session_state.cikis_basildi = True 
+        time.sleep(0.5) # Çerezlerin silinmesi için zaman tanı
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -202,12 +200,12 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
-                    st.session_state.cikis_basildi = False # Girdiği an çıkış kilidini sıfırla
                     
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000)
                     
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
                     st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
