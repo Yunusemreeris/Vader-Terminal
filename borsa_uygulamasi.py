@@ -13,20 +13,19 @@ import extra_streamlit_components as stx
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Oturum Yönetimi (Kullanıcı Giriş Yaptı mı?)
+# --- KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
+if "cookie_manager" not in st.session_state:
+    st.session_state.cookie_manager = stx.CookieManager()
+cookie_manager = st.session_state.cookie_manager
+
+kayitli_mail = cookie_manager.get(cookie="vader_mail")
+kayitli_id = cookie_manager.get(cookie="vader_id")
+
+# Oturum Yönetimi
 if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = None
+    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-
-# --- YENİ: KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
-cookie_manager = stx.CookieManager(key="vader_cookies")
-
-# Zamanlama Kalkanı: Eğer çerez varsa ama oturum kapalıysa, sessizce giriş yap ve sayfayı yenile.
-if cookie_manager.get("vader_mail") is not None and st.session_state.kullanici is None:
-    st.session_state.kullanici = cookie_manager.get("vader_mail")
-    st.session_state.user_id = cookie_manager.get("vader_id")
-    st.rerun()
+    st.session_state.user_id = kayitli_id if kayitli_id else None
 
 # Supabase Bağlantısı
 @st.cache_resource
@@ -191,11 +190,8 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
-                    
-                    # YENİ: Başarılı girişte bilgileri 30 Günlük olarak Cookie'ye kaydet (2592000 saniye)
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000)
-                    
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
                     st.rerun()
                 except Exception as e:
@@ -531,7 +527,8 @@ elif sayfa == "💼 Portföyüm & Takip":
                         supabase.table("portfoyler").insert(veri).execute()
                         st.success("Kaydedildi!")
                         st.rerun()
-                    except: st.error("Veritabanı hatası.")
+                    except Exception as e: 
+                        st.error(f"Veritabanı Hata Detayı: {e}")
 
         st.subheader("📊 Kayıtlı Varlıklarınız")
         try:
@@ -555,7 +552,8 @@ elif sayfa == "💼 Portföyüm & Takip":
                         st.markdown("---")
                     except: st.warning("Veri çekilemiyor.")
             else: st.info("Portföy boş.")
-        except: st.error("Veritabanı hatası.")
+        except Exception as e: 
+            st.error(f"Veritabanı Hata Detayı: {e}")
             
         st.markdown("---")
         st.subheader("📋 Canlı İzleme Listesi")
