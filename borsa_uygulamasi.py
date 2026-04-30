@@ -66,8 +66,8 @@ def rakam_formatla(deger):
         return deger
 
 # --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI (ANTI-BAN SİSTEMİ) ---
-@st.cache_data(ttl=300) # Dakikalık için 300 saniyeye çekildi
-def veri_motoru(sembol, p="2y", i="1d"): # Period ve Interval eklendi
+@st.cache_data(ttl=300)
+def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
     try: df = h.history(period=p, interval=i)
     except: df = pd.DataFrame()
@@ -85,15 +85,11 @@ def veri_motoru(sembol, p="2y", i="1d"): # Period ve Interval eklendi
         bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
     except: bilanco = pd.DataFrame()
     
-    try: haberler = h.news
-    except: haberler = []
-    
     try: bilgi = h.info
     except: bilgi = {}
     
-    return bilgi, df, df_endeks, gelir, bilanco, haberler
+    return bilgi, df, df_endeks, gelir, bilanco
 
-# --- YENİ: GOOGLE RSS HABER MOTORU (Yahoo Hata Verirse Devreye Girer) ---
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
     haberler = []
@@ -208,7 +204,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     sembol = hisse_kod + ".IS"
     studyo = st.sidebar.checkbox("YouTube Stüdyo Modu (Neon)")
     
-    # --- YENİ: ZAMAN SEÇİMİ ---
     zaman_secimi = st.sidebar.selectbox(
         "Grafik Zaman Dilimi:", 
         ["Günlük (Son 2 Yıl)", "Saatlik (Son 1 Ay)", "15 Dakikalık (Son 5 Gün)", "5 Dakikalık (Son 5 Gün)", "1 Dakikalık (Son 1 Gün)"]
@@ -225,8 +220,8 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        bilgi, df, df_endeks, gelir, bilanco, _ = veri_motoru(sembol, p, i)
-        haberler = son_dakika_haberleri(sembol) # Haberleri özel RSS motordan çek
+        bilgi, df, df_endeks, gelir, bilanco = veri_motoru(sembol, p, i)
+        haberler = son_dakika_haberleri(sembol)
         
         if not df.empty:
             fiyat = bilgi.get('currentPrice', df['Close'].iloc[-1])
@@ -332,7 +327,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 drift = u - (0.5 * var)
                 
                 gun = 30
-                np.random.seed(int(fiyat * 100)) # YENİ: Sabitleyici Tohum
+                np.random.seed(int(fiyat * 100)) # Sabitleyici Tohum
                 tahmin_getiri = np.exp(drift + stdev * np.random.standard_normal(gun))
                 tahmin_fiyat = np.zeros_like(tahmin_getiri)
                 tahmin_fiyat[0] = fiyat
@@ -370,7 +365,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                         link = haber.get('link', '#')
                         yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
                         
-                        # YENİ: Zaman damgası kontrolü
                         if 'custom_time' in haber:
                             yayin_vakti = haber['custom_time']
                         else:
@@ -388,8 +382,13 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 st.subheader("📑 Finansal Tablolar (Excel'e İndir)")
                 if not bilanco.empty:
                     bilanco.columns = [str(col).split()[0] for col in bilanco.columns]
-                    # YENİ: Rakam Formatlama eklendi
-                    formatli_bilanco = bilanco.applymap(rakam_formatla)
+                    
+                    # HATAYI DÜZELTTİĞİMİZ, YENİ SİSTEMLERE UYUMLU KISIM (KIRILMAZ YAPI)
+                    try:
+                        formatli_bilanco = bilanco.map(rakam_formatla)
+                    except AttributeError:
+                        formatli_bilanco = bilanco.applymap(rakam_formatla)
+                        
                     st.dataframe(formatli_bilanco, use_container_width=True)
                     st.download_button("📥 Bilançoyu İndir (CSV)", bilanco.to_csv(encoding='utf-8-sig'), f"{hisse_kod}_bilanco.csv", "text/csv")
                 else:
