@@ -76,17 +76,13 @@ def veri_motoru(sembol, p="2y", i="1d"):
     
     return bilgi, df, df_endeks, gelir, bilanco
 
-# HABERLERE ÖZEL ULTRA HIZLI MOTOR (Google RSS Baypas Sistemi)
+# GÜNCELLEME: BOZUK YAHOO VERİSİNİ EZEN KESİN ÇÖZÜM
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
     haberler = []
-    try:
-        haberler = yf.Ticker(sembol).news
-    except:
-        pass
-        
-    # Eğer Yahoo boş dönerse (Özellikle Türk hisselerinde), Google Haberler'e saldır
-    if not haberler: 
+    
+    # Eğer hisse Türk hissesiyse (.IS varsa) Yahoo'yu tamamen salla, direkt Google'a git
+    if ".IS" in sembol:
         try:
             arama_terimi = sembol.replace(".IS", "") + " hisse haber"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(arama_terimi)}&hl=tr&gl=TR&ceid=TR:tr"
@@ -98,13 +94,25 @@ def son_dakika_haberleri(sembol):
                 haberler.append({
                     'title': item.find('title').text,
                     'link': item.find('link').text,
-                    'publisher': item.find('source').text,
+                    'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler",
                     'custom_time': item.find('pubDate').text
                 })
-        except Exception as e:
+            return haberler
+        except:
             pass
-            
-    return haberler[:5] # Her durumda en fazla 5 haber dönsün
+
+    # Eğer yabancı hisseyse veya Google çökerse Yahoo'ya dön
+    try:
+        yh_news = yf.Ticker(sembol).news
+        if yh_news:
+            for h in yh_news:
+                # Yahoo'dan gelen içi boş "Başlık Yok" verilerini engellemek için kontrol
+                if 'title' in h and h['title']: 
+                    haberler.append(h)
+    except:
+        pass
+        
+    return haberler[:5]
 
 @st.cache_data(ttl=900)
 def watchlist_verisi_getir(sembol):
@@ -355,7 +363,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                         link = haber.get('link', '#')
                         yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
                         
-                        # Google RSS'den mi yoksa Yahoo'dan mı geldiğini kontrol edip zamanı ayarlayalım
                         if 'custom_time' in haber:
                             yayin_vakti = haber['custom_time']
                         else:
