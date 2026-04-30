@@ -545,7 +545,10 @@ elif sayfa == "💼 Portföyüm & Takip":
                         c1.write(f"**{row['hisse_kod']}**")
                         c2.write(f"Maliyet: ₺{row['maliyet']:,.2f}")
                         c3.write(f"Lot: {row['lot']}")
-                        c4.metric("Güncel Değer & Kar", f"₺{guncel_deger:,.2f}", f"₺{kar:,.2f} ({kar_yuzde:+.2f}%)")
+                        
+                        # --- GÜNCELLEME: Kâr/Zarar Rakamları Artık Dinamik Olarak Kırmızı/Yeşil Yanacak ---
+                        c4.metric("Güncel Değer & Kar", f"₺{guncel_deger:,.2f}", f"{kar:+,.2f} TL ({kar_yuzde:+.2f}%)")
+                        
                         if c5.button("Sil", key=f"del_{row['id']}"):
                             supabase.table("portfoyler").delete().eq("id", row['id']).execute()
                             st.rerun()
