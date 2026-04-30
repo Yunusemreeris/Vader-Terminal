@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Oturum Yönetimi (Kullanıcı Giriş Yaptı mı?)
+# Oturum Yönetimi
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
@@ -51,7 +51,7 @@ ingilizce_turkce_sozluk = {
     "Stockholders Equity": "Özkaynaklar", "Cash And Cash Equivalents": "Nakit"
 }
 
-# --- YENİ: FİNANSALLAR İÇİN RAKAM KISALTICI ---
+# --- RAKAM KISALTICI ---
 def rakam_formatla(deger):
     try:
         sayi = float(deger)
@@ -85,10 +85,16 @@ def veri_motoru(sembol, p="2y", i="1d"):
         bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
     except: bilanco = pd.DataFrame()
     
+    # YENİ: DÖNEM İÇİ (ÇEYREKLİK) BİLANÇO ÇEKİMİ
+    try:
+        ham_ceyrek = h.quarterly_balance_sheet
+        ceyreklik_bilanco = ham_ceyrek[ham_ceyrek.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_ceyrek is not None else pd.DataFrame()
+    except: ceyreklik_bilanco = pd.DataFrame()
+    
     try: bilgi = h.info
     except: bilgi = {}
     
-    return bilgi, df, df_endeks, gelir, bilanco
+    return bilgi, df, df_endeks, gelir, bilanco, ceyreklik_bilanco
 
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
@@ -154,7 +160,7 @@ def footer_ekle():
 # --- 4. SAYFA TASARIMLARI ---
 
 # ==========================================
-# SAYFA 1: ANA SAYFA & GİRİŞ (VERİTABANI AKTİF)
+# SAYFA 1: ANA SAYFA & GİRİŞ
 # ==========================================
 if sayfa == "🏠 Ana Sayfa & Giriş":
     st.title("Vader Analiz Dünyasına Hoş Geldiniz")
@@ -197,7 +203,7 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
     footer_ekle()
 
 # ==========================================
-# SAYFA 2: CANLI ANALİZ TERMİNALİ (TÜM ELİT ÖZELLİKLER)
+# SAYFA 2: CANLI ANALİZ TERMİNALİ
 # ==========================================
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
@@ -220,7 +226,8 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        bilgi, df, df_endeks, gelir, bilanco = veri_motoru(sembol, p, i)
+        # GÜNCEL: 6 değişkeni eksiksiz çekiyoruz (Çeyreklik bilanço eklendi)
+        bilgi, df, df_endeks, gelir, bilanco, ceyreklik_bilanco = veri_motoru(sembol, p, i)
         haberler = son_dakika_haberleri(sembol)
         
         if not df.empty:
@@ -327,12 +334,12 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 drift = u - (0.5 * var)
                 
                 gun = 30
-                np.random.seed(int(fiyat * 100)) # Sabitleyici Tohum
+                np.random.seed(int(fiyat * 100))
                 tahmin_getiri = np.exp(drift + stdev * np.random.standard_normal(gun))
                 tahmin_fiyat = np.zeros_like(tahmin_getiri)
                 tahmin_fiyat[0] = fiyat
                 for t in range(1, gun): tahmin_fiyat[t] = tahmin_fiyat[t - 1] * tahmin_getiri[t]
-                np.random.seed() # Kapat
+                np.random.seed()
                 
                 gelecek_tarihler = pd.date_range(start=df.index[-1], periods=gun)
                 
@@ -380,19 +387,25 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t6:
                 st.subheader("📑 Finansal Tablolar (Excel'e İndir)")
-                if not bilanco.empty:
-                    bilanco.columns = [str(col).split()[0] for col in bilanco.columns]
+                
+                # YENİ: DÖNEM İÇİ / YILLIK SEÇİCİ BUTON
+                tablo_secim = st.radio("Lütfen İncelemek İstediğiniz Tablo Periyodunu Seçin:", ["Yıllık Bilanço", "Dönem İçi (Çeyreklik) Bilanço"], horizontal=True)
+                
+                aktif_tablo = bilanco if tablo_secim == "Yıllık Bilanço" else ceyreklik_bilanco
+                
+                if not aktif_tablo.empty:
+                    # Tablo sütun isimlerini temizle (sadece yıl kalsın)
+                    aktif_tablo.columns = [str(col).split()[0] for col in aktif_tablo.columns]
                     
-                    # HATAYI DÜZELTTİĞİMİZ, YENİ SİSTEMLERE UYUMLU KISIM (KIRILMAZ YAPI)
                     try:
-                        formatli_bilanco = bilanco.map(rakam_formatla)
+                        formatli_bilanco = aktif_tablo.map(rakam_formatla)
                     except AttributeError:
-                        formatli_bilanco = bilanco.applymap(rakam_formatla)
+                        formatli_bilanco = aktif_tablo.applymap(rakam_formatla)
                         
                     st.dataframe(formatli_bilanco, use_container_width=True)
-                    st.download_button("📥 Bilançoyu İndir (CSV)", bilanco.to_csv(encoding='utf-8-sig'), f"{hisse_kod}_bilanco.csv", "text/csv")
+                    st.download_button(f"📥 {tablo_secim}yu İndir (CSV)", aktif_tablo.to_csv(encoding='utf-8-sig'), f"{hisse_kod}_{tablo_secim.replace(' ', '_')}.csv", "text/csv")
                 else:
-                    st.info("Veri yok.")
+                    st.info(f"Seçili şirket için {tablo_secim} verisi bulunamadı veya Yahoo Finance kısıtlaması yaşanıyor.")
         else:
             st.error("Hisse verisi çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması devam ediyor.")
     except Exception as e:
@@ -400,7 +413,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     footer_ekle()
 
 # ==========================================
-# SAYFA 3: PORTFÖYÜM & TAKİP (VERİTABANI AKTİF)
+# SAYFA 3: PORTFÖYÜM & TAKİP
 # ==========================================
 elif sayfa == "💼 Portföyüm & Takip":
     st.title("💼 Şahsi Bulut Portföyünüz")
@@ -408,7 +421,6 @@ elif sayfa == "💼 Portföyüm & Takip":
     if st.session_state.kullanici is None:
         st.warning("Bu sayfayı görüntülemek ve kendi portföyünüzü kalıcı olarak oluşturmak için lütfen Ana Sayfa üzerinden giriş yapın veya kayıt olun.")
     else:
-        # 1. VERİTABANINA HİSSE EKLEME FORMU
         with st.expander("➕ Portföye Yeni Hisse Ekle", expanded=True):
             with st.form("hisse_ekle_form"):
                 yeni_kod = st.text_input("Hisse Kodu (Örn: SASA):").upper()
@@ -430,7 +442,6 @@ elif sayfa == "💼 Portföyüm & Takip":
                     except Exception as e:
                         st.error(f"Veritabanına yazılırken bir hata oluştu. Supabase'deki SQL tablosunu oluşturduğunuzdan emin olun.")
 
-        # 2. VERİTABANINDAN PORTFÖYÜ ÇEKME VE HESAPLAMA
         st.subheader("📊 Kayıtlı Varlıklarınız ve Kar/Zarar")
         try:
             veriler = supabase.table("portfoyler").select("*").eq("user_id", st.session_state.user_id).execute()
@@ -462,7 +473,6 @@ elif sayfa == "💼 Portföyüm & Takip":
         except Exception as e:
             st.error("Veritabanına bağlanılamadı veya tablo henüz oluşturulmadı.")
             
-        # 3. İZLEME LİSTESİ (WATCHLIST)
         st.markdown("---")
         st.subheader("📋 Canlı İzleme Listesi")
         favs = st.text_input("Takip ettiğiniz hisseler (Virgülle ayırın):", "SASA, EREGL, FROTO")
