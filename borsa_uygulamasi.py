@@ -68,13 +68,18 @@ def veri_motoru(sembol, p="2y", i="1d"):
         bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
     except: bilanco = pd.DataFrame()
     
-    try: haberler = h.news
-    except: haberler = []
-    
     try: bilgi = h.info
     except: bilgi = {}
     
-    return bilgi, df, df_endeks, gelir, bilanco, haberler
+    return bilgi, df, df_endeks, gelir, bilanco
+
+# HABERLERE ÖZEL ULTRA HIZLI MOTOR (Her 60 saniyede bir güncellenir)
+@st.cache_data(ttl=60)
+def son_dakika_haberleri(sembol):
+    try:
+        return yf.Ticker(sembol).news
+    except:
+        return []
 
 @st.cache_data(ttl=900)
 def watchlist_verisi_getir(sembol):
@@ -177,7 +182,10 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        bilgi, df, df_endeks, gelir, bilanco, haberler = veri_motoru(sembol, p, i)
+        # Piyasalar ve Haberler ayrı ayrı çekiliyor (Haberler daha hızlı güncellenir)
+        bilgi, df, df_endeks, gelir, bilanco = veri_motoru(sembol, p, i)
+        haberler = son_dakika_haberleri(sembol)
+        
         if not df.empty:
             fiyat = bilgi.get('currentPrice', df['Close'].iloc[-1])
             onceki = bilgi.get('previousClose', df['Close'].iloc[-2] if len(df)>1 else fiyat)
@@ -282,8 +290,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 
                 gun = 30
                 
-                # TUTARLILIK GÜNCELLEMESİ: Hissenin anlık fiyatına (kuruşuna kadar) göre sabit bir tohum belirliyoruz.
-                # Böylece sayfa her yenilendiğinde değil, sadece hisse fiyatı değiştiğinde grafik yeniden şekillenir.
                 np.random.seed(int(fiyat * 100))
                 
                 tahmin_getiri = np.exp(drift + stdev * np.random.standard_normal(gun))
@@ -291,7 +297,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 tahmin_fiyat[0] = fiyat
                 for t in range(1, gun): tahmin_fiyat[t] = tahmin_fiyat[t - 1] * tahmin_getiri[t]
                 
-                # Diğer olası rastgelelikleri bozmamak için tohumu (seed) serbest bırakıyoruz
                 np.random.seed()
                 
                 gelecek_tarihler = pd.date_range(start=df.index[-1], periods=gun)
@@ -319,14 +324,21 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t5:
                 st.subheader("📰 Son Dakika Haberleri & Algoritmik Duygu Analizi")
+                st.caption("Bu bölüm küresel gelişmeleri yakalamak için her 60 saniyede bir otomatik taranır.")
                 if haberler:
                     for haber in haberler[:5]:
                         baslik = haber.get('title', 'Başlık Yok')
                         link = haber.get('link', '#')
                         yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
+                        
+                        # Zaman damgasını (Timestamp) okunabilir formata çeviriyoruz
+                        zaman_damgasi = haber.get('providerPublishTime', 0)
+                        yayin_vakti = datetime.fromtimestamp(zaman_damgasi).strftime('%d.%m.%Y %H:%M') if zaman_damgasi else "Zaman Bilinmiyor"
+                        
                         duygu = duygu_analizi(baslik)
-                        with st.expander(f"{duygu} | {baslik} ({yayin})"):
-                            st.write(f"[Haberi Oku]({link})")
+                        with st.expander(f"{duygu} | {baslik}"):
+                            st.write(f"**Kaynak:** {yayin} | **Tarih:** {yayin_vakti}")
+                            st.write(f"[Haberin Tamamını Oku]({link})")
                 else:
                     st.info("Bu şirket için güncel haber verisi bulunamadı.")
 
