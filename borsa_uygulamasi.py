@@ -5,6 +5,9 @@ import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
 from supabase import create_client, Client
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
@@ -73,13 +76,35 @@ def veri_motoru(sembol, p="2y", i="1d"):
     
     return bilgi, df, df_endeks, gelir, bilanco
 
-# HABERLERE ÖZEL ULTRA HIZLI MOTOR (Her 60 saniyede bir güncellenir)
+# HABERLERE ÖZEL ULTRA HIZLI MOTOR (Google RSS Baypas Sistemi)
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
+    haberler = []
     try:
-        return yf.Ticker(sembol).news
+        haberler = yf.Ticker(sembol).news
     except:
-        return []
+        pass
+        
+    # Eğer Yahoo boş dönerse (Özellikle Türk hisselerinde), Google Haberler'e saldır
+    if not haberler: 
+        try:
+            arama_terimi = sembol.replace(".IS", "") + " hisse haber"
+            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(arama_terimi)}&hl=tr&gl=TR&ceid=TR:tr"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            xml_data = urllib.request.urlopen(req).read()
+            root = ET.fromstring(xml_data)
+            
+            for item in root.findall('./channel/item')[:5]:
+                haberler.append({
+                    'title': item.find('title').text,
+                    'link': item.find('link').text,
+                    'publisher': item.find('source').text,
+                    'custom_time': item.find('pubDate').text
+                })
+        except Exception as e:
+            pass
+            
+    return haberler[:5] # Her durumda en fazla 5 haber dönsün
 
 @st.cache_data(ttl=900)
 def watchlist_verisi_getir(sembol):
@@ -182,7 +207,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        # Piyasalar ve Haberler ayrı ayrı çekiliyor (Haberler daha hızlı güncellenir)
         bilgi, df, df_endeks, gelir, bilanco = veri_motoru(sembol, p, i)
         haberler = son_dakika_haberleri(sembol)
         
@@ -331,9 +355,12 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                         link = haber.get('link', '#')
                         yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
                         
-                        # Zaman damgasını (Timestamp) okunabilir formata çeviriyoruz
-                        zaman_damgasi = haber.get('providerPublishTime', 0)
-                        yayin_vakti = datetime.fromtimestamp(zaman_damgasi).strftime('%d.%m.%Y %H:%M') if zaman_damgasi else "Zaman Bilinmiyor"
+                        # Google RSS'den mi yoksa Yahoo'dan mı geldiğini kontrol edip zamanı ayarlayalım
+                        if 'custom_time' in haber:
+                            yayin_vakti = haber['custom_time']
+                        else:
+                            zaman_damgasi = haber.get('providerPublishTime', 0)
+                            yayin_vakti = datetime.fromtimestamp(zaman_damgasi).strftime('%d.%m.%Y %H:%M') if zaman_damgasi else "Zaman Bilinmiyor"
                         
                         duygu = duygu_analizi(baslik)
                         with st.expander(f"{duygu} | {baslik}"):
