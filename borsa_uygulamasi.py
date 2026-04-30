@@ -51,9 +51,23 @@ ingilizce_turkce_sozluk = {
     "Stockholders Equity": "Özkaynaklar", "Cash And Cash Equivalents": "Nakit"
 }
 
+# --- YENİ: FİNANSALLAR İÇİN RAKAM KISALTICI ---
+def rakam_formatla(deger):
+    try:
+        sayi = float(deger)
+        if pd.isna(sayi): return "Veri Yok"
+        if abs(sayi) >= 1_000_000_000:
+            return f"{sayi / 1_000_000_000:,.2f} Mlr"
+        elif abs(sayi) >= 1_000_000:
+            return f"{sayi / 1_000_000:,.2f} Mly"
+        else:
+            return f"{sayi:,.2f}"
+    except:
+        return deger
+
 # --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI (ANTI-BAN SİSTEMİ) ---
-@st.cache_data(ttl=300)
-def veri_motoru(sembol, p="2y", i="1d"):
+@st.cache_data(ttl=300) # Dakikalık için 300 saniyeye çekildi
+def veri_motoru(sembol, p="2y", i="1d"): # Period ve Interval eklendi
     h = yf.Ticker(sembol)
     try: df = h.history(period=p, interval=i)
     except: df = pd.DataFrame()
@@ -71,17 +85,18 @@ def veri_motoru(sembol, p="2y", i="1d"):
         bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
     except: bilanco = pd.DataFrame()
     
+    try: haberler = h.news
+    except: haberler = []
+    
     try: bilgi = h.info
     except: bilgi = {}
     
-    return bilgi, df, df_endeks, gelir, bilanco
+    return bilgi, df, df_endeks, gelir, bilanco, haberler
 
-# GÜNCELLEME: BOZUK YAHOO VERİSİNİ EZEN KESİN ÇÖZÜM
+# --- YENİ: GOOGLE RSS HABER MOTORU (Yahoo Hata Verirse Devreye Girer) ---
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
     haberler = []
-    
-    # Eğer hisse Türk hissesiyse (.IS varsa) Yahoo'yu tamamen salla, direkt Google'a git
     if ".IS" in sembol:
         try:
             arama_terimi = sembol.replace(".IS", "") + " hisse haber"
@@ -89,7 +104,6 @@ def son_dakika_haberleri(sembol):
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             xml_data = urllib.request.urlopen(req).read()
             root = ET.fromstring(xml_data)
-            
             for item in root.findall('./channel/item')[:5]:
                 haberler.append({
                     'title': item.find('title').text,
@@ -100,18 +114,14 @@ def son_dakika_haberleri(sembol):
             return haberler
         except:
             pass
-
-    # Eğer yabancı hisseyse veya Google çökerse Yahoo'ya dön
     try:
         yh_news = yf.Ticker(sembol).news
         if yh_news:
             for h in yh_news:
-                # Yahoo'dan gelen içi boş "Başlık Yok" verilerini engellemek için kontrol
-                if 'title' in h and h['title']: 
+                if 'title' in h and h['title']:
                     haberler.append(h)
     except:
         pass
-        
     return haberler[:5]
 
 @st.cache_data(ttl=900)
@@ -196,27 +206,27 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
     sembol = hisse_kod + ".IS"
+    studyo = st.sidebar.checkbox("YouTube Stüdyo Modu (Neon)")
     
+    # --- YENİ: ZAMAN SEÇİMİ ---
     zaman_secimi = st.sidebar.selectbox(
         "Grafik Zaman Dilimi:", 
         ["Günlük (Son 2 Yıl)", "Saatlik (Son 1 Ay)", "15 Dakikalık (Son 5 Gün)", "5 Dakikalık (Son 5 Gün)", "1 Dakikalık (Son 1 Gün)"]
     )
-    
     if zaman_secimi == "Günlük (Son 2 Yıl)": p, i = "2y", "1d"
     elif zaman_secimi == "Saatlik (Son 1 Ay)": p, i = "1mo", "1h"
     elif zaman_secimi == "15 Dakikalık (Son 5 Gün)": p, i = "5d", "15m"
     elif zaman_secimi == "5 Dakikalık (Son 5 Gün)": p, i = "5d", "5m"
     elif zaman_secimi == "1 Dakikalık (Son 1 Gün)": p, i = "1d", "1m"
 
-    studyo = st.sidebar.checkbox("YouTube Stüdyo Modu (Neon)")
     tema = "plotly_dark"
     renk = '#00FFCC' if studyo else 'lime'
     
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        bilgi, df, df_endeks, gelir, bilanco = veri_motoru(sembol, p, i)
-        haberler = son_dakika_haberleri(sembol)
+        bilgi, df, df_endeks, gelir, bilanco, _ = veri_motoru(sembol, p, i)
+        haberler = son_dakika_haberleri(sembol) # Haberleri özel RSS motordan çek
         
         if not df.empty:
             fiyat = bilgi.get('currentPrice', df['Close'].iloc[-1])
@@ -231,6 +241,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("F/K Oranı", round(bilgi.get('trailingPE', 0), 2) if bilgi.get('trailingPE') else "N/A")
             m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}")
 
+            # 6 DEV SEKME
             t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Gelişmiş Grafikler", "⚙️ Al-Sat Robotu", "🤖 AI Yorum & Sağlık", "🎯 Değerleme & Tahmin", "📰 Haberler & Duygu", "📑 Finansallar"])
             
             with t1:
@@ -283,7 +294,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     st.plotly_chart(fig_macd, use_container_width=True)
 
             with t2:
-                st.subheader("⚙️ 20 ve 50 Periyotluk Ortalama Kesişim Robotu")
+                st.subheader("⚙️ 20 ve 50 Günlük Ortalama Kesişim Robotu")
                 df['SMA20'] = df['Close'].rolling(20).mean()
                 df['SMA50'] = df['Close'].rolling(50).mean()
                 df['Sinyal_Rob'] = np.where(df['SMA20'] > df['SMA50'], 1, 0)
@@ -314,29 +325,26 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t4:
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
-                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 periyot için tahmini fiyat rotası simüle edilmiştir.")
+                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 gün için tahmini fiyat rotası simüle edilmiştir.")
                 
                 log_returns = np.log(1 + df['Close'].pct_change())
                 u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
                 drift = u - (0.5 * var)
                 
                 gun = 30
-                
-                np.random.seed(int(fiyat * 100))
-                
+                np.random.seed(int(fiyat * 100)) # YENİ: Sabitleyici Tohum
                 tahmin_getiri = np.exp(drift + stdev * np.random.standard_normal(gun))
                 tahmin_fiyat = np.zeros_like(tahmin_getiri)
                 tahmin_fiyat[0] = fiyat
                 for t in range(1, gun): tahmin_fiyat[t] = tahmin_fiyat[t - 1] * tahmin_getiri[t]
-                
-                np.random.seed()
+                np.random.seed() # Kapat
                 
                 gelecek_tarihler = pd.date_range(start=df.index[-1], periods=gun)
                 
                 fig_mc = go.Figure()
                 fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Geçmiş Fiyat'))
-                fig_mc.add_trace(go.Scatter(x=gelecek_tarihler, y=tahmin_fiyat, line=dict(color='#00FFCC', width=2, dash='dot'), name='AI Tahmini (30 Periyot)'))
-                fig_mc.update_layout(template=tema, height=350, title="30 Periyotluk Matematiksel Projeksiyon (Tutarlı)")
+                fig_mc.add_trace(go.Scatter(x=gelecek_tarihler, y=tahmin_fiyat, line=dict(color='#00FFCC', width=2, dash='dot'), name='AI Tahmini (30 Gün)'))
+                fig_mc.update_layout(template=tema, height=350, title="30 Günlük Matematiksel Projeksiyon (Tutarlı)")
                 st.plotly_chart(fig_mc, use_container_width=True)
                 
                 st.markdown("---")
@@ -356,23 +364,23 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t5:
                 st.subheader("📰 Son Dakika Haberleri & Algoritmik Duygu Analizi")
-                st.caption("Bu bölüm küresel gelişmeleri yakalamak için her 60 saniyede bir otomatik taranır.")
                 if haberler:
                     for haber in haberler[:5]:
                         baslik = haber.get('title', 'Başlık Yok')
                         link = haber.get('link', '#')
                         yayin = haber.get('publisher', 'Bilinmeyen Kaynak')
                         
+                        # YENİ: Zaman damgası kontrolü
                         if 'custom_time' in haber:
                             yayin_vakti = haber['custom_time']
                         else:
                             zaman_damgasi = haber.get('providerPublishTime', 0)
                             yayin_vakti = datetime.fromtimestamp(zaman_damgasi).strftime('%d.%m.%Y %H:%M') if zaman_damgasi else "Zaman Bilinmiyor"
-                        
+
                         duygu = duygu_analizi(baslik)
                         with st.expander(f"{duygu} | {baslik}"):
                             st.write(f"**Kaynak:** {yayin} | **Tarih:** {yayin_vakti}")
-                            st.write(f"[Haberin Tamamını Oku]({link})")
+                            st.write(f"[Haberi Oku]({link})")
                 else:
                     st.info("Bu şirket için güncel haber verisi bulunamadı.")
 
@@ -380,7 +388,9 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 st.subheader("📑 Finansal Tablolar (Excel'e İndir)")
                 if not bilanco.empty:
                     bilanco.columns = [str(col).split()[0] for col in bilanco.columns]
-                    st.dataframe(bilanco, use_container_width=True)
+                    # YENİ: Rakam Formatlama eklendi
+                    formatli_bilanco = bilanco.applymap(rakam_formatla)
+                    st.dataframe(formatli_bilanco, use_container_width=True)
                     st.download_button("📥 Bilançoyu İndir (CSV)", bilanco.to_csv(encoding='utf-8-sig'), f"{hisse_kod}_bilanco.csv", "text/csv")
                 else:
                     st.info("Veri yok.")
