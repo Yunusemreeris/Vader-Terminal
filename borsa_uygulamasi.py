@@ -49,13 +49,14 @@ ingilizce_turkce_sozluk = {
 }
 
 # --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI (ANTI-BAN SİSTEMİ) ---
-@st.cache_data(ttl=900)
-def veri_motoru(sembol):
+# DAKİKALIK GÜNCELLEME İÇİN SÜRE 5 DAKİKAYA (300sn) İNDİRİLDİ
+@st.cache_data(ttl=300)
+def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
-    try: df = h.history(period="2y")
+    try: df = h.history(period=p, interval=i)
     except: df = pd.DataFrame()
     
-    try: df_endeks = yf.Ticker("XU100.IS").history(period="2y")
+    try: df_endeks = yf.Ticker("XU100.IS").history(period=p, interval=i)
     except: df_endeks = pd.DataFrame()
     
     try:
@@ -158,6 +159,19 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Analiz Edilecek Hisse (Örn: THYAO):", "THYAO").upper()
     sembol = hisse_kod + ".IS"
+    
+    # EKLENEN KISIM: ZAMAN DİLİMİ SEÇİCİ
+    zaman_secimi = st.sidebar.selectbox(
+        "Grafik Zaman Dilimi:", 
+        ["Günlük (Son 2 Yıl)", "Saatlik (Son 1 Ay)", "15 Dakikalık (Son 5 Gün)", "5 Dakikalık (Son 5 Gün)", "1 Dakikalık (Son 1 Gün)"]
+    )
+    
+    if zaman_secimi == "Günlük (Son 2 Yıl)": p, i = "2y", "1d"
+    elif zaman_secimi == "Saatlik (Son 1 Ay)": p, i = "1mo", "1h"
+    elif zaman_secimi == "15 Dakikalık (Son 5 Gün)": p, i = "5d", "15m"
+    elif zaman_secimi == "5 Dakikalık (Son 5 Gün)": p, i = "5d", "5m"
+    elif zaman_secimi == "1 Dakikalık (Son 1 Gün)": p, i = "1d", "1m"
+
     studyo = st.sidebar.checkbox("YouTube Stüdyo Modu (Neon)")
     tema = "plotly_dark"
     renk = '#00FFCC' if studyo else 'lime'
@@ -165,7 +179,8 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        bilgi, df, df_endeks, gelir, bilanco, haberler = veri_motoru(sembol)
+        # p ve i (period ve interval) değişkenleri veri motoruna gönderiliyor
+        bilgi, df, df_endeks, gelir, bilanco, haberler = veri_motoru(sembol, p, i)
         if not df.empty:
             fiyat = bilgi.get('currentPrice', df['Close'].iloc[-1])
             onceki = bilgi.get('previousClose', df['Close'].iloc[-2] if len(df)>1 else fiyat)
@@ -179,7 +194,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("F/K Oranı", round(bilgi.get('trailingPE', 0), 2) if bilgi.get('trailingPE') else "N/A")
             m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}")
 
-            # 6 DEV SEKME
+            # 6 DEV SEKME (HİÇBİRİ SİLİNMEDİ)
             t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Gelişmiş Grafikler", "⚙️ Al-Sat Robotu", "🤖 AI Yorum & Sağlık", "🎯 Değerleme & Tahmin", "📰 Haberler & Duygu", "📑 Finansallar"])
             
             with t1:
@@ -201,7 +216,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     fig.add_trace(go.Scatter(x=df.index, y=df['Upper'], line=dict(color='gray', width=1, dash='dash'), name='Üst Bant'))
                     fig.add_trace(go.Scatter(x=df.index, y=df['Lower'], line=dict(color='gray', width=1, dash='dash'), name='Alt Bant', fill='tonexty', fillcolor='rgba(128,128,128,0.1)'))
 
-                fig.update_layout(title="Ana Fiyat Grafiği", template=tema, height=450, hovermode="x unified")
+                fig.update_layout(title=f"Ana Fiyat Grafiği ({zaman_secimi})", template=tema, height=450, hovermode="x unified")
                 st.plotly_chart(fig, use_container_width=True)
                 
                 if goster_rsi:
@@ -232,7 +247,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     st.plotly_chart(fig_macd, use_container_width=True)
 
             with t2:
-                st.subheader("⚙️ 20 ve 50 Günlük Ortalama Kesişim Robotu")
+                st.subheader("⚙️ 20 ve 50 Periyotluk Ortalama Kesişim Robotu")
                 df['SMA20'] = df['Close'].rolling(20).mean()
                 df['SMA50'] = df['Close'].rolling(50).mean()
                 df['Sinyal_Rob'] = np.where(df['SMA20'] > df['SMA50'], 1, 0)
@@ -263,7 +278,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t4:
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
-                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 gün için tahmini fiyat rotası simüle edilmiştir.")
+                st.markdown("Hissenin tarihsel oynaklığına (volatilite) dayalı olarak önümüzdeki 30 periyot (seçilen zaman dilimine göre) için tahmini fiyat rotası simüle edilmiştir.")
                 
                 log_returns = np.log(1 + df['Close'].pct_change())
                 u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
@@ -279,8 +294,8 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 
                 fig_mc = go.Figure()
                 fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Geçmiş Fiyat'))
-                fig_mc.add_trace(go.Scatter(x=gelecek_tarihler, y=tahmin_fiyat, line=dict(color='#00FFCC', width=2, dash='dot'), name='AI Tahmini (30 Gün)'))
-                fig_mc.update_layout(template=tema, height=350, title="30 Günlük Matematiksel Projeksiyon")
+                fig_mc.add_trace(go.Scatter(x=gelecek_tarihler, y=tahmin_fiyat, line=dict(color='#00FFCC', width=2, dash='dot'), name='AI Tahmini (30 Periyot)'))
+                fig_mc.update_layout(template=tema, height=350, title="30 Periyotluk Matematiksel Projeksiyon")
                 st.plotly_chart(fig_mc, use_container_width=True)
                 
                 st.markdown("---")
