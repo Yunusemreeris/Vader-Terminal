@@ -195,7 +195,9 @@ def ai_bilanco_yorumu(bilgi):
         yorumlar.append("🟢 **Borçluluk:** Kısa vadeli nakit durumu güçlü." if cari >= 1.5 else "🔴 **Borçluluk:** Nakit akışı ve borç ödeme kapasitesi sınırda.")
     if marj:
         yorumlar.append("🟢 **Karlılık:** Kar marjı sağlıklı (%15+)." if marj > 0.15 else "🔴 **Karlılık:** Kar marjı düşük, kasaya az nakit giriyor.")
-    return yorumlar if yorumlar else ["Veri kısıtlaması nedeniyle AI yorumu üretilemedi."]
+    
+    # YENİ: Profesyonel Hata Kapatıcı
+    return yorumlar if yorumlar else ["⚠️ **Veri Kısıtlaması:** Yahoo Finance, Türkiye hisseleri için bilanço temel verilerini (F/K, Cari Oran vb.) gizlediği için Vader AI şu an bu hisseye not veremiyor."]
 
 def duygu_analizi(metin):
     metin = str(metin).lower()
@@ -298,8 +300,9 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Anlık Fiyat", f"₺{fiyat:,.2f}", f"{degisim:+.2f} TL ({yuzde:+.2f}%)")
             m2.metric("Günlük Hacim", f"{bilgi.get('volume', int(df['Volume'].iloc[-1])):,}")
-            m3.metric("F/K Oranı", round(bilgi.get('trailingPE', 0), 2) if bilgi.get('trailingPE') else "N/A")
-            m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}")
+            # YENİ: Profesyonel Veri Gizleme Formatı
+            m3.metric("F/K Oranı", round(bilgi.get('trailingPE'), 2) if bilgi.get('trailingPE') else "Bilinmiyor")
+            m4.metric("Piyasa Değeri", f"₺{bilgi.get('marketCap', 0):,}" if bilgi.get('marketCap') else "Bilinmiyor")
 
             t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Gelişmiş Grafikler", "⚙️ Al-Sat Robotu", "🤖 AI Yorum & Sağlık", "🎯 Değerleme & Tahmin", "📰 Haberler", "📑 Finansallar", "💬 Vader AI (İnteraktif)"])
             
@@ -358,11 +361,12 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 for y in ai_bilanco_yorumu(bilgi): st.write(y)
                 st.markdown("---")
                 c1, c2, c3 = st.columns(3)
-                c1.metric("PD/DD", round(bilgi.get('priceToBook', 0), 2) if bilgi.get('priceToBook') else "Yok")
-                c2.metric("Özkaynak Karlılığı (ROE)", f"%{round(bilgi.get('returnOnEquity', 0)*100, 2)}" if bilgi.get('returnOnEquity') else "Yok")
-                c3.metric("Cari Oran", round(bilgi.get('currentRatio', 0), 2) if bilgi.get('currentRatio') else "Yok")
+                # YENİ: Profesyonel Veri Gizleme Formatı
+                c1.metric("PD/DD", round(bilgi.get('priceToBook', 0), 2) if bilgi.get('priceToBook') else "Gizli / Veri Yok")
+                c2.metric("Özkaynak Karlılığı (ROE)", f"%{round(bilgi.get('returnOnEquity', 0)*100, 2)}" if bilgi.get('returnOnEquity') else "Gizli / Veri Yok")
+                c3.metric("Cari Oran", round(bilgi.get('currentRatio', 0), 2) if bilgi.get('currentRatio') else "Gizli / Veri Yok")
 
-            with t4: # EKSİKSİZ MONTE CARLO VE DEĞERLEME RESTORE EDİLDİ
+            with t4: 
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
                 st.markdown("Hissenin tarihsel oynaklığına dayalı önümüzdeki 30 gün için tahmini rotası simüle edilmiştir.")
                 
@@ -388,11 +392,13 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 st.subheader("🎯 İçsel Değer & Zaman Makinesi")
                 eps = bilgi.get('trailingEps', 0)
                 beklenen_buyume = st.slider("Tahmini Yıllık Büyüme (%):", 1, 50, 15)
+                
+                # YENİ: Hata yerine sarı profesyonel uyarı kutusu
                 if eps and eps > 0:
                     icsel = eps * (8.5 + (2 * (beklenen_buyume / 100) * 100))
                     st.info(f"Hesaplanan Gerçek Eder (Graham): **₺{icsel:,.2f}** (Anlık Fiyat: ₺{fiyat:,.2f})")
                 else:
-                    st.error("EPS verisi eksik olduğu için hesaplanamıyor.")
+                    st.warning("⚠️ **Sistem Uyarısı:** Yahoo Finance bu hissenin EPS (Hisse Başına Kâr) verisini dışarıya kapattığı için 'Gerçek Eder' hesaplaması yapılamıyor.")
 
                 yatirim = st.slider("1 Yıl Önce Ne Kadar Yatırsaydım:", 1000, 1000000, 10000, 1000)
                 gecmis_fiyat = df['Close'].iloc[-252] if len(df) >= 252 else df['Close'].iloc[0]
@@ -419,7 +425,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     st.dataframe(f_b, use_container_width=True)
                 else: st.info(f"{tablo_secim} verisi bulunamadı.")
 
-            with t7: # EKSİKSİZ YAPAY ZEKA SOHBET MODÜLÜ RESTORE EDİLDİ
+            with t7: 
                 st.subheader(f"🧠 Vader AI - {hisse_kod} Özel Asistanı")
                 st.markdown("Bana hissenin güncel temel verileri, pahalılığı veya teknik durumu hakkında sorular sorabilirsin.")
                 kullanici_sorusu = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hisse alınır mı?")
@@ -456,7 +462,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     footer_ekle()
 
 # ==========================================
-# SAYFA: RAKİP ANALİZİ (EKSİKSİZ RESTORE EDİLDİ)
+# SAYFA: RAKİP ANALİZİ
 # ==========================================
 elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     st.title("⚔️ Sektörel Çarpışma: Rakip Analizi")
