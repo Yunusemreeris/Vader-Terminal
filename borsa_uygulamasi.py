@@ -9,31 +9,31 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
+import time  
 
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# --- 2. KUSURSUZ ÇEREZ YÖNETİCİSİ VE GECİKME AVCISI ---
-cookie_manager = stx.CookieManager()
+# --- KUSURSUZ ÇEREZ (COOKIE) YÖNETİCİSİ ---
+if "cookie_manager" not in st.session_state:
+    st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies")
+cookie_manager = st.session_state.cookie_manager
 
-# Oturum durumlarını en baştan tanımla
+# --- HAYAT KURTARAN YÜKLEME EKRANI (RACE CONDITION ÇÖZÜMÜ) ---
+if 'cerez_kontrol_edildi' not in st.session_state:
+    st.session_state.cerez_kontrol_edildi = True
+    with st.spinner("🔐 Güvenli oturum kontrol ediliyor, lütfen bekleyin..."):
+        time.sleep(0.6)  
+    st.rerun()           
+
+kayitli_mail = cookie_manager.get(cookie="vader_mail")
+kayitli_id = cookie_manager.get(cookie="vader_id")
+
+# Oturum Yönetimi
 if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = None
+    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'manuel_cikis' not in st.session_state:
-    st.session_state.manuel_cikis = False
-
-# Tarayıcıdan gelen çerezi al (Bu işlem 1 saniye geçikmeli gelebilir)
-kayitli_mail = cookie_manager.get("vader_mail")
-kayitli_id = cookie_manager.get("vader_id")
-
-# BİNG! İŞTE KUSURSUZ ALGORİTMA:
-# Eğer oturum boş görünüyorsa AMA tarayıcı sonradan çerezi gönderdiyse ve adam kendi eliyle çıkış yapmadıysa; anında içeri al!
-if st.session_state.kullanici is None and kayitli_mail is not None and not st.session_state.manuel_cikis:
-    st.session_state.kullanici = kayitli_mail
-    st.session_state.user_id = kayitli_id
-    st.rerun()
+    st.session_state.user_id = kayitli_id if kayitli_id else None
 
 # Supabase Bağlantısı
 @st.cache_resource
@@ -47,7 +47,7 @@ def supabase_baglan():
 
 supabase = supabase_baglan()
 
-# --- 3. PROFESYONEL NAVİGASYON MENÜSÜ ---
+# --- 2. PROFESYONEL NAVİGASYON MENÜSÜ ---
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
@@ -57,7 +57,7 @@ if st.session_state.kullanici:
         cookie_manager.delete("vader_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        st.session_state.manuel_cikis = True # Otomatik girişi kilitle
+        time.sleep(0.5) 
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -91,7 +91,7 @@ def rakam_formatla(deger):
     except:
         return deger
 
-# --- 4. GÜÇLENDİRİLMİŞ VERİ MOTORLARI ---
+# --- 3. GÜÇLENDİRİLMİŞ VERİ MOTORLARI ---
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
@@ -180,7 +180,7 @@ def footer_ekle():
     st.markdown(f"<p style='text-align: center; color: gray;'>Copyright © {datetime.now().year} Yunus Emre Eriş - Vader Analiz Terminali | Tüm Hakları Saklıdır.</p>", unsafe_allow_html=True)
 
 
-# --- 5. SAYFA TASARIMLARI ---
+# --- 4. SAYFA TASARIMLARI ---
 
 if sayfa == "🏠 Ana Sayfa & Giriş":
     st.title("Vader Analiz Dünyasına Hoş Geldiniz")
@@ -199,12 +199,12 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
-                    st.session_state.manuel_cikis = False # Yeni girişte kilidi aç
                     
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000)
                     
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
                     st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
@@ -521,13 +521,13 @@ elif sayfa == "📡 Piyasa Radarı (Tarayıcı)":
     footer_ekle()
 
 # ==========================================
-# SAYFA 3: PORTFÖYÜM & TAKİP
+# SAYFA 3: PORTFÖYÜM & TAKİP (DEV GÜNCELLEME)
 # ==========================================
 elif sayfa == "💼 Portföyüm & Takip":
     st.title("💼 Şahsi Bulut Portföyünüz")
     if st.session_state.kullanici is None: st.warning("Bu sayfayı görüntülemek için giriş yapmalısınız.")
     else:
-        with st.expander("➕ Portföye Yeni Hisse Ekle", expanded=True):
+        with st.expander("➕ Portföye Yeni Hisse Ekle", expanded=False):
             with st.form("hisse_ekle_form"):
                 yeni_kod = st.text_input("Hisse Kodu (Örn: SASA):").upper()
                 yeni_maliyet = st.number_input("Maliyet (TL)", min_value=0.0, step=1.0)
@@ -542,27 +542,80 @@ elif sayfa == "💼 Portföyüm & Takip":
                     except Exception as e: 
                         st.error(f"Veritabanı Hata Detayı: {e}")
 
-        st.subheader("📊 Kayıtlı Varlıklarınız")
+        # --- YENİ EKLENEN ÖZET VE ÇEMBER GRAFİK ALANI ---
+        st.subheader("📊 Portföy Analizi ve Varlıklarınız")
         try:
             veriler = supabase.table("portfoyler").select("*").eq("user_id", st.session_state.user_id).execute()
             if veriler.data:
-                for index, row in pd.DataFrame(veriler.data).iterrows():
+                df_port = pd.DataFrame(veriler.data)
+                
+                toplam_maliyet_genel = 0
+                toplam_guncel_genel = 0
+                pasta_etiketler = []
+                pasta_degerler = []
+                gecerli_veriler = []
+
+                # Verileri önden tarayıp portföy özetini hazırlıyoruz
+                for index, row in df_port.iterrows():
                     try:
                         anlik_fiyat = watchlist_verisi_getir(row['hisse_kod'] + ".IS")['Close'].iloc[-1]
                         guncel_deger = anlik_fiyat * row['lot']
                         toplam_maliyet = row['maliyet'] * row['lot']
                         kar = guncel_deger - toplam_maliyet
                         kar_yuzde = (kar / toplam_maliyet) * 100 if toplam_maliyet > 0 else 0
+                        
+                        toplam_maliyet_genel += toplam_maliyet
+                        toplam_guncel_genel += guncel_deger
+                        
+                        pasta_etiketler.append(row['hisse_kod'])
+                        pasta_degerler.append(guncel_deger)
+                        
+                        gecerli_veriler.append({
+                            'id': row['id'],
+                            'hisse_kod': row['hisse_kod'],
+                            'maliyet': row['maliyet'],
+                            'lot': row['lot'],
+                            'guncel_deger': guncel_deger,
+                            'kar': kar,
+                            'kar_yuzde': kar_yuzde
+                        })
+                    except:
+                        st.warning(f"{row['hisse_kod']} verisi şu an çekilemiyor.")
+                
+                # Sadece geçerli veri varsa bu bölümü çiz
+                if gecerli_veriler:
+                    st.markdown("---")
+                    ozet_col, pie_col = st.columns([1, 1.5])
+                    
+                    with ozet_col:
+                        st.markdown("### 💰 Toplam Portföy Durumu")
+                        toplam_kar_genel = toplam_guncel_genel - toplam_maliyet_genel
+                        toplam_kar_yuzde = (toplam_kar_genel / toplam_maliyet_genel) * 100 if toplam_maliyet_genel > 0 else 0
+                        
+                        st.metric("Toplam Yatırım Maliyeti", f"₺{toplam_maliyet_genel:,.2f}")
+                        st.metric("Toplam Güncel Bakiye", f"₺{toplam_guncel_genel:,.2f}")
+                        st.metric("Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f} TL ({toplam_kar_yuzde:+.2f}%)")
+                    
+                    with pie_col:
+                        # Dinamik Çember (Donut) Grafik
+                        fig_pie = go.Figure(data=[go.Pie(labels=pasta_etiketler, values=pasta_degerler, hole=.4, textinfo='label+percent', marker=dict(line=dict(color='#000000', width=2)))])
+                        fig_pie.update_layout(title_text="💼 Varlık Dağılımı", template="plotly_dark", height=300, margin=dict(t=40, b=10, l=10, r=10))
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    
+                    st.markdown("---")
+                    st.markdown("### 📋 Varlık Detayları")
+                    
+                    # Eski usul satır satır döküm
+                    for varlik in gecerli_veriler:
                         c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 1.5, 2.5, 1])
-                        c1.write(f"**{row['hisse_kod']}**")
-                        c2.write(f"Maliyet: ₺{row['maliyet']:,.2f}")
-                        c3.write(f"Lot: {row['lot']}")
-                        c4.metric("Güncel Değer & Kar", f"₺{guncel_deger:,.2f}", f"{kar:+,.2f} TL ({kar_yuzde:+.2f}%)")
-                        if c5.button("Sil", key=f"del_{row['id']}"):
-                            supabase.table("portfoyler").delete().eq("id", row['id']).execute()
+                        c1.write(f"**{varlik['hisse_kod']}**")
+                        c2.write(f"Maliyet: ₺{varlik['maliyet']:,.2f}")
+                        c3.write(f"Lot: {varlik['lot']}")
+                        c4.metric("Güncel Değer & Kar", f"₺{varlik['guncel_deger']:,.2f}", f"{varlik['kar']:+,.2f} TL ({varlik['kar_yuzde']:+.2f}%)")
+                        if c5.button("Sil", key=f"del_{varlik['id']}"):
+                            supabase.table("portfoyler").delete().eq("id", varlik['id']).execute()
                             st.rerun()
                         st.markdown("---")
-                    except: st.warning("Veri çekilemiyor.")
             else: st.info("Portföy boş.")
         except Exception as e: 
             st.error(f"Veritabanı Hata Detayı: {e}")
