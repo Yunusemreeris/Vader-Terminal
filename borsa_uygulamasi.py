@@ -89,7 +89,6 @@ def rapor_olustur_html(hisse, fiyat, degisim_yuzde, rsi, yorumlar):
     b64 = base64.b64encode(html_icerik.encode()).decode()
     return f'<a href="data:text/html;base64,{b64}" download="VADER_Rapor_{hisse}.html" style="background-color:#00FFCC; color:black; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">📄 Raporu İndir (HTML/PDF)</a>'
 
-# --- YENİ AI YORUM MOTORU (Sadece Teknik Verilere Bakar) ---
 def ai_teknik_yorum(df, rsi, macd, signal):
     yorumlar = []
     fiyat = df['Close'].iloc[-1]
@@ -139,17 +138,55 @@ st.sidebar.markdown("### 🔔 PİYASA ALARMLARI")
 for alarm in piyasa_alarmlari():
     st.sidebar.warning(alarm)
 
+# SÖZLÜK GÜNCELLENDİ: Varlıklar ve Bilanço Kalemleri Eklendi
+ingilizce_turkce_sozluk = {
+    "Total Revenue": "Toplam Gelir (Satışlar)", "Gross Profit": "Brüt Kar", "Net Income": "Net Kar",
+    "Total Assets": "Toplam Varlıklar", 
+    "Current Assets": "Dönen Varlıklar (Dönem İçi Nakit/Kısa Vadeli)", 
+    "Total Non Current Assets": "Duran Varlıklar (Dönem Sonu/Uzun Vadeli)",
+    "Total Liabilities Net Minority Interest": "Toplam Borçlar",
+    "Current Liabilities": "Kısa Vadeli Borçlar",
+    "Stockholders Equity": "Özkaynaklar", "Cash And Cash Equivalents": "Nakit"
+}
+
+def rakam_formatla(deger):
+    try:
+        sayi = float(deger)
+        if pd.isna(sayi): return "Veri Yok"
+        if abs(sayi) >= 1_000_000_000: return f"{sayi / 1_000_000_000:,.2f} Mlr"
+        elif abs(sayi) >= 1_000_000: return f"{sayi / 1_000_000:,.2f} Mly"
+        else: return f"{sayi:,.2f}"
+    except: return deger
+
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
-    # ARTIK SADECE ÇALIŞAN FIYAT VE HACİM VERİSİNİ ÇEKİYORUZ, BİLANÇO ZORLAMASI YOK!
     h = yf.Ticker(sembol)
     try: df = h.history(period=p, interval=i)
     except: df = pd.DataFrame()
     
-    try: info = h.info
-    except: info = {}
+    try: df_endeks = yf.Ticker("XU100.IS").history(period=p, interval=i)
+    except: df_endeks = pd.DataFrame()
     
-    return df, info
+    # Bilanço ve Gelir tabloları geri eklendi
+    try:
+        ham_gelir = h.financials
+        gelir = ham_gelir[ham_gelir.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_gelir is not None else pd.DataFrame()
+    except: gelir = pd.DataFrame()
+        
+    try:
+        ham_bilanco = h.balance_sheet
+        bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
+    except: bilanco = pd.DataFrame()
+    
+    try:
+        ham_ceyrek = h.quarterly_balance_sheet
+        ceyreklik_bilanco = ham_ceyrek[ham_ceyrek.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_ceyrek is not None else pd.DataFrame()
+    except: ceyreklik_bilanco = pd.DataFrame()
+    
+    try: bilgi = h.info
+    except: bilgi = {}
+    
+    return bilgi, df, df_endeks, gelir, bilanco, ceyreklik_bilanco
 
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
@@ -165,7 +202,13 @@ def son_dakika_haberleri(sembol):
                 haberler.append({'title': item.find('title').text, 'link': item.find('link').text, 'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler", 'custom_time': item.find('pubDate').text})
             return haberler
         except: pass
-    return haberler
+    try:
+        yh_news = yf.Ticker(sembol).news
+        if yh_news:
+            for h in yh_news:
+                if 'title' in h and h['title']: haberler.append(h)
+    except: pass
+    return haberler[:5]
 
 @st.cache_data(ttl=900)
 def watchlist_verisi_getir(sembol):
@@ -246,7 +289,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        df, info = veri_motoru(sembol, p, i)
+        bilgi, df, df_endeks, gelir, bilanco, ceyreklik_bilanco = veri_motoru(sembol, p, i)
         haberler = son_dakika_haberleri(sembol)
         
         if not df.empty:
@@ -255,12 +298,11 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             degisim = fiyat - onceki
             yuzde = (degisim / onceki) * 100 if onceki > 0 else 0
             
-            # TEKNİK METRİKLER (Yahoo kapatsa bile biz kendimiz hesaplıyoruz)
             haftalik_getiri = ((fiyat - df['Close'].iloc[-5]) / df['Close'].iloc[-5]) * 100 if len(df) >= 5 else 0
             aylik_getiri = ((fiyat - df['Close'].iloc[-20]) / df['Close'].iloc[-20]) * 100 if len(df) >= 20 else 0
             
             c_header, c_rapor = st.columns([3, 1])
-            c_header.header(f"⚡ {info.get('longName', hisse_kod)}")
+            c_header.header(f"⚡ {bilgi.get('longName', hisse_kod)}")
             
             delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -282,14 +324,14 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 st.write("") 
                 st.markdown(rapor_olustur_html(hisse_kod, fiyat, yuzde, anlik_rsi, ai_yorum_listesi), unsafe_allow_html=True)
 
-            # EKSİKSİZ VE 100% ÇALIŞAN TEPELİK METRİKLER (Sayısal Analiz)
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Anlık Fiyat", f"₺{fiyat:,.2f}", f"{degisim:+.2f} TL ({yuzde:+.2f}%)")
             m2.metric("Günlük Hacim", f"{int(df['Volume'].iloc[-1]):,}")
             m3.metric("Haftalık Getiri", f"%{haftalik_getiri:.2f}", "Teknik Veri")
             m4.metric("Aylık Getiri", f"%{aylik_getiri:.2f}", "Teknik Veri")
 
-            t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Gelecek Simülasyonu", "📰 Haberler", "💬 Vader AI"])
+            # TABLARA FİNANSALLAR GERİ EKLENDİ
+            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Gelecek Simülasyonu", "📰 Haberler", "📑 Finansallar", "💬 Vader AI"])
             
             with t1:
                 goster_bollinger = st.checkbox("Bollinger Bantlarını Göster")
@@ -338,7 +380,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 fig3.update_layout(template=tema, height=500, hovermode="x unified")
                 st.plotly_chart(fig3, use_container_width=True)
 
-            with t3: # YEPYENİ 100% ÇALIŞAN TEKNİK ÖZET SEKMESİ
+            with t3: 
                 for y in ai_yorum_listesi: st.write(y)
                 st.markdown("---")
                 c1, c2, c3 = st.columns(3)
@@ -352,7 +394,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 c2.metric("Peryodun En Düşük Fiyatı", f"₺{dip_52:.2f}", f"Dipten Uzaklık: %{dibe_uzaklik:+.2f}")
                 c3.metric("Anlık Volatilite (Standart Sapma)", f"₺{df['Close'].tail(20).std():.2f}")
 
-            with t4: # MÜKEMMEL ÇALIŞAN MONTE CARLO
+            with t4: 
                 st.subheader("🔮 Yapay Zeka Gelecek Tahmini (Monte Carlo)")
                 st.markdown("Hissenin tarihsel oynaklığına dayalı önümüzdeki 30 gün için tahmini rotası simüle edilmiştir.")
                 
@@ -391,7 +433,24 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             st.write(f"[Haberi Oku]({h.get('link', '#')})")
                 else: st.info("Haber bulunamadı.")
 
-            with t6: 
+            # YENİ: BİLANÇO VE VARLIKLAR SEKMESİ (Hata Vermeyen Sistemle)
+            with t6:
+                st.subheader("📑 Finansal Tablolar ve Bilanço")
+                tablo_secim = st.radio("İncelemek İstediğiniz Tabloyu Seçin:", ["Yıllık Bilanço", "Dönem İçi (Çeyreklik) Bilanço", "Gelir Tablosu"], horizontal=True)
+                
+                if tablo_secim == "Yıllık Bilanço": aktif_tablo = bilanco
+                elif tablo_secim == "Dönem İçi (Çeyreklik) Bilanço": aktif_tablo = ceyreklik_bilanco
+                else: aktif_tablo = gelir
+
+                if not aktif_tablo.empty:
+                    aktif_tablo.columns = [str(col).split()[0] for col in aktif_tablo.columns]
+                    try: f_b = aktif_tablo.map(rakam_formatla)
+                    except AttributeError: f_b = aktif_tablo.applymap(rakam_formatla)
+                    st.dataframe(f_b, use_container_width=True)
+                else:
+                    st.warning("⚠️ Bilanço ve Dönem İçi Varlık verileri, Yahoo Finance tarafından BİST hisseleri için anlık olarak gizlenmiş veya kısıtlanmış olabilir.")
+
+            with t7: 
                 st.subheader(f"🧠 Vader AI - {hisse_kod} Özel Asistanı")
                 st.markdown("Bana hissenin güncel durumu hakkında teknik sorular sorabilirsin.")
                 kullanici_sorusu = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hissenin grafiği nasıl, teknik yönü ne?")
@@ -418,7 +477,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     footer_ekle()
 
 # ==========================================
-# SAYFA: RAKİP ANALİZİ (YENİ TEKNİK KIYASLAMA)
+# SAYFA: RAKİP ANALİZİ
 # ==========================================
 elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     st.title("⚔️ Sektörel Çarpışma: Rakip Analizi")
@@ -436,7 +495,6 @@ elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
             if not df1.empty and not df2.empty:
                 st.subheader("📊 Teknik Veri Karşılaştırması")
                 
-                # Sadece çalışan teknik ve getiri metriklerini kıyasla
                 getiri_1y_1 = ((df1['Close'].iloc[-1] - df1['Close'].iloc[0]) / df1['Close'].iloc[0]) * 100
                 getiri_1y_2 = ((df2['Close'].iloc[-1] - df2['Close'].iloc[0]) / df2['Close'].iloc[0]) * 100
                 
