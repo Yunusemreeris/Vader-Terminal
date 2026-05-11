@@ -138,6 +138,34 @@ st.sidebar.markdown("### 🔔 PİYASA ALARMLARI")
 for alarm in piyasa_alarmlari():
     st.sidebar.warning(alarm)
 
+# --- GELİŞMİŞ SÖZLÜK: DÖNEM İÇİ VE DÖNEM SONU VARLIKLAR EKLENDİ ---
+ingilizce_turkce_sozluk = {
+    "Total Revenue": "Toplam Gelir (Satışlar)", 
+    "Operating Revenue": "Faaliyet Geliri",
+    "Gross Profit": "Brüt Kar", 
+    "Net Income": "Net Kar",
+    "Total Assets": "Toplam Varlıklar", 
+    "Current Assets": "Dönen Varlıklar (Dönem İçi Nakit/Kısa Vadeli)", 
+    "Total Non Current Assets": "Duran Varlıklar (Dönem Sonu/Uzun Vadeli)",
+    "Total Liabilities Net Minority Interest": "Toplam Borçlar",
+    "Current Liabilities": "Kısa Vadeli Borçlar",
+    "Total Non Current Liabilities Net Minority Interest": "Uzun Vadeli Borçlar",
+    "Total Debt": "Toplam Finansal Borç",
+    "Stockholders Equity": "Özkaynaklar", 
+    "Cash And Cash Equivalents": "Nakit ve Nakit Benzerleri",
+    "Inventory": "Stoklar"
+}
+
+def rakam_formatla(deger):
+    try:
+        sayi = float(deger)
+        if pd.isna(sayi): return "Veri Yok"
+        if abs(sayi) >= 1_000_000_000: return f"{sayi / 1_000_000_000:,.2f} Mlr"
+        elif abs(sayi) >= 1_000_000: return f"{sayi / 1_000_000:,.2f} Mly"
+        else: return f"{sayi:,.2f}"
+    except: return deger
+
+# BİLANÇO MOTORU RESTORE EDİLDİ
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
@@ -147,7 +175,22 @@ def veri_motoru(sembol, p="2y", i="1d"):
     try: info = h.info
     except: info = {}
     
-    return df, info
+    try:
+        ham_gelir = h.financials
+        gelir = ham_gelir[ham_gelir.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_gelir is not None else pd.DataFrame()
+    except: gelir = pd.DataFrame()
+        
+    try:
+        ham_bilanco = h.balance_sheet
+        bilanco = ham_bilanco[ham_bilanco.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_bilanco is not None else pd.DataFrame()
+    except: bilanco = pd.DataFrame()
+    
+    try:
+        ham_ceyrek = h.quarterly_balance_sheet
+        ceyreklik_bilanco = ham_ceyrek[ham_ceyrek.index.isin(ingilizce_turkce_sozluk.keys())].rename(index=ingilizce_turkce_sozluk) if ham_ceyrek is not None else pd.DataFrame()
+    except: ceyreklik_bilanco = pd.DataFrame()
+    
+    return df, info, gelir, bilanco, ceyreklik_bilanco
 
 @st.cache_data(ttl=60)
 def son_dakika_haberleri(sembol):
@@ -163,7 +206,13 @@ def son_dakika_haberleri(sembol):
                 haberler.append({'title': item.find('title').text, 'link': item.find('link').text, 'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler", 'custom_time': item.find('pubDate').text})
             return haberler
         except: pass
-    return haberler
+    try:
+        yh_news = yf.Ticker(sembol).news
+        if yh_news:
+            for h in yh_news:
+                if 'title' in h and h['title']: haberler.append(h)
+    except: pass
+    return haberler[:5]
 
 @st.cache_data(ttl=900)
 def watchlist_verisi_getir(sembol):
@@ -244,7 +293,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     if studyo: st.markdown("<style>h1, h2 { color: #00FFCC !important; }</style>", unsafe_allow_html=True)
 
     try:
-        df, info = veri_motoru(sembol, p, i)
+        df, info, gelir, bilanco, ceyreklik_bilanco = veri_motoru(sembol, p, i)
         haberler = son_dakika_haberleri(sembol)
         
         if not df.empty:
@@ -285,7 +334,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("Haftalık Getiri", f"%{haftalik_getiri:.2f}", "Teknik Veri")
             m4.metric("Aylık Getiri", f"%{aylik_getiri:.2f}", "Teknik Veri")
 
-            t1, t2, t3, t4, t5, t6 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon", "📰 Haberler", "💬 Vader AI"])
+            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon", "📰 Haberler", "📑 Finansallar", "💬 Vader AI"])
             
             with t1:
                 goster_bollinger = st.checkbox("Bollinger Bantlarını Göster")
@@ -348,22 +397,18 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 c2.metric("Peryodun En Düşük Fiyatı", f"₺{dip_52:.2f}", f"Dipten Uzaklık: %{dibe_uzaklik:+.2f}")
                 c3.metric("Anlık Volatilite (Standart Sapma)", f"₺{df['Close'].tail(20).std():.2f}")
 
-            # --- YENİ EKSİKSİZ VE YÜKSEK İSABETLİ MONTE CARLO ---
             with t4: 
                 st.subheader("🔮 Yapay Zeka Gelecek Simülasyonu (Pro Monte Carlo)")
                 st.markdown("Hissenin son 1 yıllık hareketleri ve güncel ivmesi (momentum) kullanılarak aynı anda **100 farklı paralel evren** simüle edilmiş ve **En Yüksek İhtimalli** rota hesaplanmıştır.")
                 
-                # Sadece kapanışların logaritmik getirisi (Boşlukları atıyoruz)
                 log_returns = np.log(1 + df['Close'].pct_change()).dropna()
                 u = log_returns.mean()
                 var = log_returns.var()
                 stdev = log_returns.std()
                 
-                # Momentum Aşısı: Sadece eski tarihlere değil, hissenin son 20 günlük taze hareketine ağırlık ver
                 son_20_getiri = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1 if len(df) >= 20 else 0
                 momentum_drift = son_20_getiri / 20
                 
-                # Klasik sapma ile momentumu harmanlıyoruz (%60 Momentum Ağırlıklı)
                 drift = (u - (0.5 * var)) * 0.4 + (momentum_drift * 0.6)
 
                 gun = 30
@@ -377,7 +422,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     tahminler[t] = tahminler[t - 1] * np.exp(drift + stdev * Z)
                 np.random.seed()
                 
-                # 100 Evrenden İhtimalleri Seçme (Kanal Bantları)
                 beklenen_medyan = np.percentile(tahminler, 50, axis=1)
                 iyimser_senaryo = np.percentile(tahminler, 95, axis=1)
                 kotumser_senaryo = np.percentile(tahminler, 5, axis=1)
@@ -410,7 +454,25 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             st.write(f"[Haberi Oku]({h.get('link', '#')})")
                 else: st.info("Haber bulunamadı.")
 
-            with t6: 
+            # --- İŞTE GERİ DÖNEN EFSANE: FİNANSALLAR SEKMESİ ---
+            with t6:
+                st.subheader("📑 Finansal Tablolar ve Bilanço")
+                tablo_secim = st.radio("İncelemek İstediğiniz Tabloyu Seçin:", ["Yıllık Bilanço", "Dönem İçi (Çeyreklik) Bilanço", "Gelir Tablosu"], horizontal=True)
+                
+                if tablo_secim == "Yıllık Bilanço": aktif_tablo = bilanco
+                elif tablo_secim == "Dönem İçi (Çeyreklik) Bilanço": aktif_tablo = ceyreklik_bilanco
+                else: aktif_tablo = gelir
+
+                if not aktif_tablo.empty:
+                    # Tablo tarihlerini (kolonları) sadece yıl/ay gösterecek şekilde temizliyoruz
+                    aktif_tablo.columns = [str(col).split()[0] for col in aktif_tablo.columns]
+                    try: f_b = aktif_tablo.map(rakam_formatla)
+                    except AttributeError: f_b = aktif_tablo.applymap(rakam_formatla)
+                    st.dataframe(f_b, use_container_width=True)
+                else:
+                    st.warning("⚠️ Seçilen finansal veriler, Yahoo Finance tarafından anlık olarak gizlenmiş veya kısıtlanmış olabilir.")
+
+            with t7: 
                 st.subheader(f"🧠 Vader AI - {hisse_kod} Özel Asistanı")
                 st.markdown("Bana hissenin güncel durumu hakkında teknik sorular sorabilirsin.")
                 kullanici_sorusu = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hissenin grafiği nasıl, teknik yönü ne?")
@@ -449,8 +511,8 @@ elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     
     if st.button("Çarpıştır ⚡"):
         try:
-            df1, info1 = veri_motoru(h1 + ".IS", "1y", "1d")
-            df2, info2 = veri_motoru(h2 + ".IS", "1y", "1d")
+            df1, info1 = yf.Ticker(h1 + ".IS").history(period="1y", interval="1d"), {}
+            df2, info2 = yf.Ticker(h2 + ".IS").history(period="1y", interval="1d"), {}
             
             if not df1.empty and not df2.empty:
                 st.subheader("📊 Teknik Veri Karşılaştırması")
