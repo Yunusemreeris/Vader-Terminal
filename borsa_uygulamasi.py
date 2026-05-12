@@ -16,6 +16,17 @@ import base64
 # --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
+# --- GÜVENLİK KALKANI: GITHUB İKONUNU VE MENÜYÜ GİZLE ---
+gizleme_kodu = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            [data-testid="stToolbar"] {visibility: hidden !important;}
+            </style>
+            """
+st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
 if "cookie_manager" not in st.session_state:
     st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies")
 cookie_manager = st.session_state.cookie_manager
