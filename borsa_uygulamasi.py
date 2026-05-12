@@ -12,7 +12,6 @@ import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
 import time
 import base64
-import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
@@ -217,7 +216,10 @@ if st.session_state.kullanici:
         st.session_state.kullanici = None
         st.session_state.user_id = None
         st.session_state.uyelik_tipi = "free"
-        components.html("<script>window.parent.location.reload();</script>", height=0)
+        
+        # SİHİRLİ DOKUNUŞ: Çökmeden organik yenileme
+        time.sleep(1.5)
+        st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
     "🏠 Ana Sayfa & Giriş", 
@@ -263,8 +265,12 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                         cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="giris_1")
                         cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="giris_2")
                     except: pass
+                    
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
-                    components.html("<script>window.parent.location.reload();</script>", height=0)
+                    
+                    # SİHİRLİ DOKUNUŞ: Çökmeden organik yenileme
+                    time.sleep(1.5)
+                    st.rerun()
                 except Exception as e: st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
                 
         with col_reg:
