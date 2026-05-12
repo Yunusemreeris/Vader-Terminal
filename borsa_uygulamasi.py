@@ -115,10 +115,14 @@ def ai_teknik_yorum(df, rsi, macd, signal):
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
-    st.sidebar.success(f"👤 Aktif Kullanıcı:\n{st.session_state.kullanici}")
+    # Eğer giren kişi sensen, Admin rozeti tak. Başkasıysa Misafir de.
+    if st.session_state.kullanici == "erisyunusemre985@gmail.com":
+        st.sidebar.success(f"👑 KURUCU / ADMİN:\n{st.session_state.kullanici}")
+    else:
+        st.sidebar.info(f"👤 Misafir Kullanıcı:\n{st.session_state.kullanici}")
+        
     if st.sidebar.button("🚪 Çıkış Yap"):
         cookie_manager.delete("vader_mail")
-        cookie_manager.delete("vader_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
         time.sleep(0.5) 
