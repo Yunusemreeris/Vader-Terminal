@@ -16,37 +16,36 @@ import base64
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# GitHub ikonunu gizleyen ama Menü tuşunu (Header) BOZMAYAN Kalkan!
+# GitHub ikonunu gizleyen ama SOL MENÜYÜ BOZMAYAN Kalkan!
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
-            [data-testid="stToolbar"] {visibility: hidden !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
 
 # --- 2. KUSURSUZ ÇEREZ (BENİ HATIRLA) MOTORU ---
-# Uyku ilacı kaldırıldı, sistem artık organik hızda çalışacak
-if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies_v5")
-cookie_manager = st.session_state.cookie_manager
+# Özel key ile çakışmaları engelliyoruz
+cookie_manager = stx.CookieManager(key="vader_master_cookie")
 
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
-if 'manuel_cikis' not in st.session_state:
-    st.session_state.manuel_cikis = False
 
-kayitli_mail = cookie_manager.get(cookie="vader_mail")
-kayitli_id = cookie_manager.get(cookie="vader_id")
+# BİNG! Gecikmeli Çerez Avcısı: Önce tüm çerezlerin yüklenmesini bekle
+tum_cerezler = cookie_manager.get_all()
 
-# Eğer çerez varsa ve kendi eliyle çıkış yapmadıysa anında içeri al
-if st.session_state.kullanici is None and kayitli_mail is not None and not st.session_state.manuel_cikis:
-    st.session_state.kullanici = kayitli_mail
-    st.session_state.user_id = kayitli_id
-    st.rerun() 
+if tum_cerezler is not None:
+    kayitli_mail = tum_cerezler.get("vader_mail")
+    kayitli_id = tum_cerezler.get("vader_id")
+    
+    # Çerez var ama sistemde oturum açılmamışsa -> Anında İçeri Al!
+    if kayitli_mail and st.session_state.kullanici is None:
+        st.session_state.kullanici = kayitli_mail
+        st.session_state.user_id = kayitli_id
+        st.rerun()
 
 # --- 3. SUPABASE BAĞLANTISI ---
 @st.cache_resource
@@ -130,22 +129,22 @@ def ai_teknik_yorum(df, rsi, macd, signal):
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
+    # Admin & Misafir Koruması
     if st.session_state.kullanici == "erisyunusemre985@gmail.com":
         st.sidebar.success(f"👑 KURUCU / ADMİN:\n{st.session_state.kullanici}")
     else:
         st.sidebar.info(f"👤 Misafir Kullanıcı:\n{st.session_state.kullanici}")
         
     if st.sidebar.button("🚪 Çıkış Yap"):
-        # Çelik Yelekli (Hata Vermeyen) Çıkış İşlemi
+        # Çelik Yelekli Çıkış İşlemi
         try:
-            cookie_manager.delete("vader_mail", key="del_mail")
-            cookie_manager.delete("vader_id", key="del_id")
-        except Exception:
+            cookie_manager.delete("vader_mail")
+            cookie_manager.delete("vader_id")
+        except:
             pass
             
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        st.session_state.manuel_cikis = True 
         time.sleep(0.5)
         st.rerun()
 
@@ -273,13 +272,12 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
-                    st.session_state.manuel_cikis = False 
                     
-                    # Çelik Yelekli Giriş İşlemi
+                    # Çerezi bas ve içeri al
                     try:
-                        cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="set_mail")
-                        cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="set_id")
-                    except Exception:
+                        cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
+                        cookie_manager.set("vader_id", response.user.id, max_age=2592000)
+                    except:
                         pass
                         
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
