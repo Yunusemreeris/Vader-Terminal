@@ -13,10 +13,10 @@ import extra_streamlit_components as stx
 import time
 import base64
 
-# --- 1. SİTE KONFİGÜRASYONU VE VERİTABANI BAĞLANTISI ---
+# --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# --- GÜVENLİK KALKANI: GITHUB İKONUNU VE MENÜYÜ GİZLE ---
+# GitHub ikonunu ve Streamlit menülerini gizleyen kalkan
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -27,24 +27,28 @@ gizleme_kodu = """
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
 
-if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager(key="vader_cookies")
-cookie_manager = st.session_state.cookie_manager
+# --- 2. KUSURSUZ ÇEREZ (BENİ HATIRLA) MOTORU ---
+cookie_manager = stx.CookieManager(key="vader_cookies_v3")
 
-if 'cerez_kontrol_edildi' not in st.session_state:
-    st.session_state.cerez_kontrol_edildi = True
-    with st.spinner("🔐 Güvenli oturum kontrol ediliyor, lütfen bekleyin..."):
-        time.sleep(0.6)  
-    st.rerun()           
+# Oturum durumlarını en baştan oluştur
+if 'kullanici' not in st.session_state:
+    st.session_state.kullanici = None
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'manuel_cikis' not in st.session_state:
+    st.session_state.manuel_cikis = False
 
+# Tarayıcıdan gelen çerez verilerini al (Gecikmeli gelse bile)
 kayitli_mail = cookie_manager.get(cookie="vader_mail")
 kayitli_id = cookie_manager.get(cookie="vader_id")
 
-if 'kullanici' not in st.session_state:
-    st.session_state.kullanici = kayitli_mail if kayitli_mail else None
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = kayitli_id if kayitli_id else None
+# BİNG! SESSİZ GİRİŞ ALGORİTMASI:
+if st.session_state.kullanici is None and kayitli_mail is not None and not st.session_state.manuel_cikis:
+    st.session_state.kullanici = kayitli_mail
+    st.session_state.user_id = kayitli_id
+    st.rerun() 
 
+# --- 3. SUPABASE BAĞLANTISI ---
 @st.cache_resource
 def supabase_baglan():
     try:
@@ -122,11 +126,11 @@ def ai_teknik_yorum(df, rsi, macd, signal):
     
     return yorumlar
 
-# --- 2. PROFESYONEL NAVİGASYON MENÜSÜ ---
+# --- 4. PROFESYONEL NAVİGASYON MENÜSÜ ---
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
-    # Eğer giren kişi sensen, Admin rozeti tak. Başkasıysa Misafir de.
+    # Admin & Misafir Koruması
     if st.session_state.kullanici == "erisyunusemre985@gmail.com":
         st.sidebar.success(f"👑 KURUCU / ADMİN:\n{st.session_state.kullanici}")
     else:
@@ -134,9 +138,10 @@ if st.session_state.kullanici:
         
     if st.sidebar.button("🚪 Çıkış Yap"):
         cookie_manager.delete("vader_mail")
+        cookie_manager.delete("vader_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        time.sleep(0.5) 
+        st.session_state.manuel_cikis = True # Otomatik girişi kilitle
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -153,7 +158,6 @@ st.sidebar.markdown("### 🔔 PİYASA ALARMLARI")
 for alarm in piyasa_alarmlari():
     st.sidebar.warning(alarm)
 
-# --- GELİŞMİŞ SÖZLÜK: DÖNEM İÇİ VE DÖNEM SONU VARLIKLAR EKLENDİ ---
 ingilizce_turkce_sozluk = {
     "Total Revenue": "Toplam Gelir (Satışlar)", 
     "Operating Revenue": "Faaliyet Geliri",
@@ -180,7 +184,6 @@ def rakam_formatla(deger):
         else: return f"{sayi:,.2f}"
     except: return deger
 
-# BİLANÇO MOTORU RESTORE EDİLDİ
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
     h = yf.Ticker(sembol)
@@ -265,6 +268,8 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
+                    st.session_state.manuel_cikis = False # Yeni girişte kilidi aç
+                    
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000)
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
@@ -469,7 +474,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             st.write(f"[Haberi Oku]({h.get('link', '#')})")
                 else: st.info("Haber bulunamadı.")
 
-            # --- İŞTE GERİ DÖNEN EFSANE: FİNANSALLAR SEKMESİ ---
             with t6:
                 st.subheader("📑 Finansal Tablolar ve Bilanço")
                 tablo_secim = st.radio("İncelemek İstediğiniz Tabloyu Seçin:", ["Yıllık Bilanço", "Dönem İçi (Çeyreklik) Bilanço", "Gelir Tablosu"], horizontal=True)
@@ -479,7 +483,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 else: aktif_tablo = gelir
 
                 if not aktif_tablo.empty:
-                    # Tablo tarihlerini (kolonları) sadece yıl/ay gösterecek şekilde temizliyoruz
                     aktif_tablo.columns = [str(col).split()[0] for col in aktif_tablo.columns]
                     try: f_b = aktif_tablo.map(rakam_formatla)
                     except AttributeError: f_b = aktif_tablo.applymap(rakam_formatla)
@@ -526,8 +529,8 @@ elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     
     if st.button("Çarpıştır ⚡"):
         try:
-            df1, info1 = yf.Ticker(h1 + ".IS").history(period="1y", interval="1d"), {}
-            df2, info2 = yf.Ticker(h2 + ".IS").history(period="1y", interval="1d"), {}
+            df1 = yf.Ticker(h1 + ".IS").history(period="1y", interval="1d")
+            df2 = yf.Ticker(h2 + ".IS").history(period="1y", interval="1d")
             
             if not df1.empty and not df2.empty:
                 st.subheader("📊 Teknik Veri Karşılaştırması")
