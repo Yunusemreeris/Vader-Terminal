@@ -30,7 +30,6 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # --- 2. KUSURSUZ ÇEREZ (BENİ HATIRLA) MOTORU ---
 cookie_manager = stx.CookieManager(key="vader_cookies_v3")
 
-# Oturum durumlarını en baştan oluştur
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
@@ -38,11 +37,9 @@ if 'user_id' not in st.session_state:
 if 'manuel_cikis' not in st.session_state:
     st.session_state.manuel_cikis = False
 
-# Tarayıcıdan gelen çerez verilerini al (Gecikmeli gelse bile)
 kayitli_mail = cookie_manager.get(cookie="vader_mail")
 kayitli_id = cookie_manager.get(cookie="vader_id")
 
-# BİNG! SESSİZ GİRİŞ ALGORİTMASI:
 if st.session_state.kullanici is None and kayitli_mail is not None and not st.session_state.manuel_cikis:
     st.session_state.kullanici = kayitli_mail
     st.session_state.user_id = kayitli_id
@@ -137,11 +134,12 @@ if st.session_state.kullanici:
         st.sidebar.info(f"👤 Misafir Kullanıcı:\n{st.session_state.kullanici}")
         
     if st.sidebar.button("🚪 Çıkış Yap"):
-        cookie_manager.delete("vader_mail")
-        cookie_manager.delete("vader_id")
+        # YENİ: Çakışma olmaması için özel key atandı
+        cookie_manager.delete("vader_mail", key="cikis_sil_mail")
+        cookie_manager.delete("vader_id", key="cikis_sil_id")
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        st.session_state.manuel_cikis = True # Otomatik girişi kilitle
+        st.session_state.manuel_cikis = True 
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -268,10 +266,11 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     response = supabase.auth.sign_in_with_password({"email": log_mail, "password": log_pw})
                     st.session_state.kullanici = response.user.email
                     st.session_state.user_id = response.user.id
-                    st.session_state.manuel_cikis = False # Yeni girişte kilidi aç
+                    st.session_state.manuel_cikis = False 
                     
-                    cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
-                    cookie_manager.set("vader_id", response.user.id, max_age=2592000)
+                    # YENİ: Çakışma olmaması için özel key atandı
+                    cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="giris_kayit_mail")
+                    cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="giris_kayit_id")
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
                     time.sleep(0.5)
                     st.rerun()
@@ -529,8 +528,8 @@ elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     
     if st.button("Çarpıştır ⚡"):
         try:
-            df1 = yf.Ticker(h1 + ".IS").history(period="1y", interval="1d")
-            df2 = yf.Ticker(h2 + ".IS").history(period="1y", interval="1d")
+            df1, info1, _, _, _ = veri_motoru(h1 + ".IS", "1y", "1d")
+            df2, info2, _, _, _ = veri_motoru(h2 + ".IS", "1y", "1d")
             
             if not df1.empty and not df2.empty:
                 st.subheader("📊 Teknik Veri Karşılaştırması")
