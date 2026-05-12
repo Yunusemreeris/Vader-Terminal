@@ -30,6 +30,12 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # --- 2. KUSURSUZ ÇEREZ (BENİ HATIRLA) MOTORU ---
 cookie_manager = stx.CookieManager(key="vader_cookies_v3")
 
+if 'cerez_kontrol_edildi' not in st.session_state:
+    st.session_state.cerez_kontrol_edildi = True
+    with st.spinner("🔐 Güvenli oturum kontrol ediliyor, lütfen bekleyin..."):
+        time.sleep(0.6)  
+    st.rerun()           
+
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
@@ -134,12 +140,20 @@ if st.session_state.kullanici:
         st.sidebar.info(f"👤 Misafir Kullanıcı:\n{st.session_state.kullanici}")
         
     if st.sidebar.button("🚪 Çıkış Yap"):
-        # YENİ: Çakışma olmaması için özel key atandı
-        cookie_manager.delete("vader_mail", key="cikis_sil_mail")
-        cookie_manager.delete("vader_id", key="cikis_sil_id")
+        # YENİ: Çökmeyi engelleyen Try-Except Hata Zırhı eklendi
+        try:
+            cookie_manager.delete("vader_mail", key="cikis_sil_mail")
+        except Exception:
+            pass
+        try:
+            cookie_manager.delete("vader_id", key="cikis_sil_id")
+        except Exception:
+            pass
+            
         st.session_state.kullanici = None
         st.session_state.user_id = None
         st.session_state.manuel_cikis = True 
+        time.sleep(0.3)
         st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
@@ -268,7 +282,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     st.session_state.user_id = response.user.id
                     st.session_state.manuel_cikis = False 
                     
-                    # YENİ: Çakışma olmaması için özel key atandı
                     cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="giris_kayit_mail")
                     cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="giris_kayit_id")
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
