@@ -12,12 +12,11 @@ import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
 import time
 import base64
-import streamlit.components.v1 as components  # YENİ: Javascript F5 motoru için eklendi
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# GitHub, Share ve Toolbar ikonlarını kökünden kazıyan AGRESİF Kalkan! (Menü tuşu bozulmaz)
+# GitHub ikonunu ve rahatsız edici butonları gizleyen kalkan
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
@@ -25,20 +24,20 @@ gizleme_kodu = """
             [data-testid="stToolbar"] {display: none !important;}
             [data-testid="stDecoration"] {display: none !important;}
             .stDeployButton {display: none !important;}
-            /* Streamlit Cloud'un inatçı sağ üst container'ını yok et */
             header .st-emotion-cache-1cvow4s {display: none !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
 
 # --- 2. KUSURSUZ ÇEREZ (BENİ HATIRLA) MOTORU ---
-cookie_manager = stx.CookieManager(key="vader_master_cookie")
+cookie_manager = stx.CookieManager(key="vader_master")
 
 if 'kullanici' not in st.session_state:
     st.session_state.kullanici = None
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 
+# Tüm çerezleri çek
 tum_cerezler = cookie_manager.get_all()
 
 if tum_cerezler is not None:
@@ -132,25 +131,22 @@ def ai_teknik_yorum(df, rsi, macd, signal):
 st.sidebar.markdown(f"<h2 style='text-align: center; color: #00FFCC;'>🛸 VADER PRO</h2>", unsafe_allow_html=True)
 
 if st.session_state.kullanici:
-    # Admin & Misafir Koruması
     if st.session_state.kullanici == "erisyunusemre985@gmail.com":
         st.sidebar.success(f"👑 KURUCU / ADMİN:\n{st.session_state.kullanici}")
     else:
         st.sidebar.info(f"👤 Misafir Kullanıcı:\n{st.session_state.kullanici}")
         
     if st.sidebar.button("🚪 Çıkış Yap"):
+        # Kusursuz Çıkış Sistemi: Çerezleri temizle ve session_state'i kapat
         try:
-            cookie_manager.delete("vader_mail")
-            cookie_manager.delete("vader_id")
-        except:
-            pass
-            
+            cookie_manager.delete("vader_mail", key="cikis_1")
+            cookie_manager.delete("vader_id", key="cikis_2")
+        except: pass
+        
         st.session_state.kullanici = None
         st.session_state.user_id = None
-        
-        # HARİKA ÇÖZÜM: Python gecikmesini beklemeden tarayıcıya JS ile zorla F5 attırıyoruz!
-        components.html("<script>window.parent.location.reload();</script>", height=0)
-        time.sleep(0.5)
+        time.sleep(0.3)
+        st.rerun()
 
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
     "🏠 Ana Sayfa & Giriş", 
@@ -278,15 +274,13 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     st.session_state.user_id = response.user.id
                     
                     try:
-                        cookie_manager.set("vader_mail", response.user.email, max_age=2592000)
-                        cookie_manager.set("vader_id", response.user.id, max_age=2592000)
-                    except:
-                        pass
+                        cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="giris_1")
+                        cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="giris_2")
+                    except: pass
                         
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
-                    # Javascript ile anında taze giriş yenilemesi
-                    components.html("<script>window.parent.location.reload();</script>", height=0)
-                    time.sleep(1)
+                    time.sleep(0.5)
+                    st.rerun() # Sağlıklı Streamlit yenilemesi
                 except Exception as e:
                     st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
                 
@@ -541,8 +535,8 @@ elif sayfa == "⚔️ Rakip Analizi (Karşılaştırma)":
     
     if st.button("Çarpıştır ⚡"):
         try:
-            df1 = yf.Ticker(h1 + ".IS").history(period="1y", interval="1d")
-            df2 = yf.Ticker(h2 + ".IS").history(period="1y", interval="1d")
+            df1, info1, _, _, _ = veri_motoru(h1 + ".IS", "1y", "1d")
+            df2, info2, _, _, _ = veri_motoru(h2 + ".IS", "1y", "1d")
             
             if not df1.empty and not df2.empty:
                 st.subheader("📊 Teknik Veri Karşılaştırması")
