@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 import extra_streamlit_components as stx
 import time
 import base64
+import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
@@ -117,27 +118,36 @@ def piyasa_alarmlari():
         except: pass
     return alarmlar if alarmlar else ["Piyasa şu an sakin, olağanüstü bir hareket yok."]
 
-@st.cache_data(ttl=60)
+# YENİ CANAVAR HABER MOTORU (Sadece son 24 saat)
+@st.cache_data(ttl=30) 
 def son_dakika_haberleri(sembol):
     haberler = []
     if ".IS" in sembol:
         try:
-            arama_terimi = sembol.replace(".IS", "") + " hisse haber"
+            arama_terimi = sembol.replace(".IS", "") + " hisse haber when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(arama_terimi)}&hl=tr&gl=TR&ceid=TR:tr"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
             xml_data = urllib.request.urlopen(req).read()
             root = ET.fromstring(xml_data)
-            for item in root.findall('./channel/item')[:5]:
-                haberler.append({'title': item.find('title').text, 'link': item.find('link').text, 'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler", 'custom_time': item.find('pubDate').text})
+            
+            for item in root.findall('./channel/item')[:8]: 
+                haberler.append({
+                    'title': item.find('title').text, 
+                    'link': item.find('link').text, 
+                    'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler", 
+                    'custom_time': item.find('pubDate').text
+                })
             return haberler
         except: pass
+        
     try:
         yh_news = yf.Ticker(sembol).news
         if yh_news:
             for h in yh_news:
                 if 'title' in h and h['title']: haberler.append(h)
     except: pass
-    return haberler[:5]
+    
+    return haberler[:8]
 
 def duygu_analizi(metin):
     metin = str(metin).lower()
@@ -217,7 +227,6 @@ if st.session_state.kullanici:
         st.session_state.user_id = None
         st.session_state.uyelik_tipi = "free"
         
-        # SİHİRLİ DOKUNUŞ: Çökmeden organik yenileme
         time.sleep(1.5)
         st.rerun()
 
@@ -267,8 +276,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                     except: pass
                     
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
-                    
-                    # SİHİRLİ DOKUNUŞ: Çökmeden organik yenileme
                     time.sleep(1.5)
                     st.rerun()
                 except Exception as e: st.error("Giriş başarısız! E-posta veya şifre hatalı olabilir.")
@@ -473,14 +480,29 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     if st.button("💎 Premium Satın Al"): st.info("İletişim: yunusemreeris787@gmail.com")
 
             with t5:
+                # YENİ CANLI HABER ARAYÜZÜ
+                c_hab1, c_hab2 = st.columns([3, 1])
+                c_hab1.subheader("📡 Canlı Haber Radarı")
+                
+                if c_hab2.button("🔄 Radarı Yenile", key="haber_yenile_btn"):
+                    son_dakika_haberleri.clear() 
+                    st.rerun() 
+                
+                st.markdown("---")
+                
                 if haberler:
-                    for h in haberler[:5]:
+                    for h in haberler[:8]:
                         b = h.get('title', 'Başlık Yok')
-                        y_v = h.get('custom_time', datetime.fromtimestamp(h.get('providerPublishTime', 0)).strftime('%d.%m.%Y %H:%M') if h.get('providerPublishTime') else "Zaman Bilinmiyor")
+                        if 'custom_time' in h:
+                            y_v = h['custom_time']
+                        else:
+                            y_v = datetime.fromtimestamp(h.get('providerPublishTime', 0)).strftime('%d.%m.%Y %H:%M') if h.get('providerPublishTime') else "Yeni"
+                            
                         with st.expander(f"{duygu_analizi(b)} | {b}"):
                             st.write(f"**Kaynak:** {h.get('publisher', 'Bilinmeyen')} | **Tarih:** {y_v}")
                             st.write(f"[Haberi Oku]({h.get('link', '#')})")
-                else: st.info("Haber bulunamadı.")
+                else: 
+                    st.info("Son 24 saat içinde bu varlık için önemli bir haber düşmedi.")
 
             with t6:
                 st.subheader("📑 Finansal Tablolar ve Bilanço")
