@@ -15,15 +15,16 @@ import base64
 import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
-st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
+# initial_sidebar_state="auto" yaparak menü tuşunun her zaman orada kalmasını garantiliyoruz.
+st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="auto")
 
-# --- Masum Kalkan (Sadece iç yapıyı temizler, menüye asla dokunmaz) ---
+# CSS Kalkanını sadece içerik için kullan, menü tuşuna dokunma!
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
-            /* Uygulama içindeki standart toolbar'ı gizler */
-            header [data-testid="stToolbar"] {display: none !important;}
+            /* Sadece Streamlit logosunu gizle, menü tuşuna dokunma */
+            .stDeployButton {display: none !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
