@@ -13,11 +13,18 @@ import extra_streamlit_components as stx
 import time
 import base64
 import streamlit.components.v1 as components
+import io
+
+# Ses motoru çökme kalkanı (Eğer kütüphane yoksa siteyi çökertmez)
+try:
+    from gtts import gTTS
+    HAS_GTTS = True
+except ImportError:
+    HAS_GTTS = False
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# MASUM KALKAN: Menüye dokunmaz, sadece reklamları gizler
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
@@ -230,7 +237,7 @@ sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
     "📰 Piyasa Haberleri",
     "⭐ İzleme Listem",
     "⚔️ Rakip Analizi",
-    "📡 Piyasa Radarı & Isı Haritası",
+    "📡 Piyasa Radarı & Yeni Nesil Eklentiler",
     "💼 Portföyüm", 
     "👤 Hesabım",
     "📩 Hakkımda & İletişim"
@@ -506,12 +513,12 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- YENİ SAYFA: PİYASA HABERLERİ ---
+# --- YENİ SAYFA: PİYASA HABERLERİ & SESLİ BRİFİNG (EKLENTİ 4) ---
 elif sayfa == "📰 Piyasa Haberleri":
-    st.title("📰 Piyasa Haber Merkezi")
-    st.markdown("Global piyasaların nabzını ve portföyünüzün son durumunu anlık takip edin.")
+    st.title("📰 Piyasa Haber Merkezi & AI Brifing")
+    st.markdown("Global piyasaların nabzını ve yapay zeka destekli güncel sesli özetleri takip edin.")
     
-    tab_genel, tab_izleme = st.tabs(["🌍 Genel Piyasa Gündemi", "⭐ İzleme Listem Haberleri"])
+    tab_genel, tab_izleme, tab_podcast = st.tabs(["🌍 Genel Piyasa Gündemi", "⭐ İzleme Listem Haberleri", "🎧 Vader Sesli Brifing (YENİ)"])
     
     with tab_genel:
         c1, c2 = st.columns([4, 1])
@@ -560,9 +567,28 @@ elif sayfa == "📰 Piyasa Haberleri":
         else:
             st.error("İzleme listenizdeki varlıkların özel haberlerini görebilmek için üye girişi yapmalısınız.")
             
+    with tab_podcast:
+        st.subheader("🎧 Vader Günlük Sesli Piyasa Özeti")
+        st.markdown("Yapay zeka tarafından hazırlanan güncel piyasa brifingini dinleyin (Kulaklıkları takın).")
+        
+        if st.button("🎙️ Bugünkü Podcast'i Oluştur"):
+            if not HAS_GTTS:
+                st.error("⚠️ Ses motoru eksik! Lütfen GitHub'da 'requirements.txt' adında bir dosya oluşturup içine 'gTTS' yazın.")
+            else:
+                with st.spinner("Vader metni sese döküyor, lütfen bekleyin..."):
+                    try:
+                        metin = "Vader analiz terminaline hoş geldiniz patron. Bugün piyasalarda hareketli bir gün yaşanıyor. Lütfen risk yönetiminizi yapmayı unutmayın ve balina radarlarını kontrol edin. Bol kazançlar dilerim."
+                        tts = gTTS(text=metin, lang='tr')
+                        fp = io.BytesIO()
+                        tts.write_to_fp(fp)
+                        st.audio(fp)
+                        st.success("✅ Podcast hazır! Yukarıdaki oynatıcıdan dinleyebilirsiniz.")
+                    except Exception as e:
+                        st.error(f"Ses oluşturulurken hata: {e}")
+            
     footer_ekle()
 
-# --- SAYFA: İZLEME LİSTEM (HATA YAKALAYICISIYLA) ---
+# --- SAYFA: İZLEME LİSTEM ---
 elif sayfa == "⭐ İzleme Listem":
     st.title("Kişisel İzleme Listeniz")
     st.markdown("Favoriye aldığınız tüm varlıkları tek ekranda takip edin.")
@@ -639,33 +665,109 @@ elif sayfa == "⚔️ Rakip Analizi":
         except: st.error("Hata oluştu.")
     footer_ekle()
 
-# --- SAYFA: PİYASA RADARI ---
-elif sayfa == "📡 Piyasa Radarı & Isı Haritası":
-    st.title("🗺️ Piyasa Isı Haritası & Radar")
+# --- YENİ SAYFA: PİYASA RADARI & YENİ NESİL EKLENTİLER (EKLENTİ 2 VE 5) ---
+elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
+    st.title("🗺️ Piyasa Radarı & Eklentiler")
+    
+    tab_harita, tab_balina, tab_duygu = st.tabs(["🗺️ Isı Haritası", "🐳 Balina Radarı (YENİ)", "🌡️ Piyasa Duygu Ölçer (YENİ)"])
     radar_listesi = ["THYAO.IS", "SASA.IS", "EREGL.IS", "TUPRS.IS", "FROTO.IS", "BTC-USD", "ETH-USD", "GC=F", "AAPL", "NVDA", "TSLA"]
-    if st.button("🚀 Haritayı & Radarı Çalıştır"):
-        with st.spinner("Piyasa röntgeni çekiliyor..."):
-            harita_datalari = []
-            for sembol in radar_listesi:
-                try:
-                    df = yf.Ticker(sembol).history(period="5d")
-                    if len(df) >= 2:
-                        son, eski = df['Close'].iloc[-1], df['Close'].iloc[-2]
-                        harita_datalari.append({
-                            "Hisse": sembol.replace(".IS", ""), "Degisim": round(((son - eski) / eski) * 100, 2),
-                            "Hacim": df['Volume'].iloc[-1], "Fiyat": round(son, 2), 
-                            "Grup": "Kripto" if "-USD" in sembol else ("ABD" if not ".IS" in sembol and "F" not in sembol else "BIST")
-                        })
-                except: pass
-            if harita_datalari:
-                df_hm = pd.DataFrame(harita_datalari)
-                fig_hm = px.treemap(df_hm, path=['Grup', 'Hisse'], values='Hacim', color='Degisim', color_continuous_scale='RdYlGn', color_continuous_midpoint=0, custom_data=['Fiyat', 'Degisim'])
-                fig_hm.update_traces(texttemplate="<b>%{label}</b><br>%{customdata[0]}<br>%{customdata[1]:.2f}%", textposition="middle center")
-                fig_hm.update_layout(template="plotly_dark", height=600, margin=dict(t=10, l=10, r=10, b=10))
-                st.plotly_chart(fig_hm, use_container_width=True)
+    
+    with tab_harita:
+        st.markdown("Piyasanın genel durumunu ısı haritası üzerinde görselleştirin.")
+        if st.button("🚀 Haritayı Çalıştır"):
+            with st.spinner("Piyasa röntgeni çekiliyor..."):
+                harita_datalari = []
+                for sembol in radar_listesi:
+                    try:
+                        df = yf.Ticker(sembol).history(period="5d")
+                        if len(df) >= 2:
+                            son, eski = df['Close'].iloc[-1], df['Close'].iloc[-2]
+                            harita_datalari.append({
+                                "Hisse": sembol.replace(".IS", ""), "Degisim": round(((son - eski) / eski) * 100, 2),
+                                "Hacim": df['Volume'].iloc[-1], "Fiyat": round(son, 2), 
+                                "Grup": "Kripto" if "-USD" in sembol else ("ABD" if not ".IS" in sembol and "F" not in sembol else "BIST")
+                            })
+                    except: pass
+                if harita_datalari:
+                    df_hm = pd.DataFrame(harita_datalari)
+                    fig_hm = px.treemap(df_hm, path=['Grup', 'Hisse'], values='Hacim', color='Degisim', color_continuous_scale='RdYlGn', color_continuous_midpoint=0, custom_data=['Fiyat', 'Degisim'])
+                    fig_hm.update_traces(texttemplate="<b>%{label}</b><br>%{customdata[0]}<br>%{customdata[1]:.2f}%", textposition="middle center")
+                    fig_hm.update_layout(template="plotly_dark", height=600, margin=dict(t=10, l=10, r=10, b=10))
+                    st.plotly_chart(fig_hm, use_container_width=True)
+                    st.dataframe(df_hm.sort_values(by="Degisim", ascending=False), use_container_width=True)
+                else: st.error("Veri çekilemedi.")
+
+    with tab_balina:
+        st.subheader("🐳 Balina Radarı (Anormal Hacim Avcısı)")
+        st.markdown("Son 20 günlük ortalama işlem hacminin **1.5 katından fazla** işlem gören varlıkları tespit eder. Sessizce toplanan hisseleri patlamadan önce bulmak için harikadır.")
+        
+        if st.button("🐳 Balinaları Tara"):
+            with st.spinner("Derin denizler taranıyor, dev işlemler aranıyor..."):
+                balinalar = []
+                for s in radar_listesi:
+                    try:
+                        d = yf.Ticker(s).history(period="1mo")
+                        if len(d) > 20:
+                            avg_vol = d['Volume'].iloc[-21:-1].mean()
+                            last_vol = d['Volume'].iloc[-1]
+                            if last_vol > (avg_vol * 1.5): 
+                                artise_orani = last_vol / avg_vol
+                                balinalar.append({"Sembol": s, "Ortalama Hacim": int(avg_vol), "Son Hacim": int(last_vol), "Artış Çarpanı": f"{artise_orani:.1f}x"})
+                    except: pass
+                if balinalar:
+                    st.success(f"{len(balinalar)} adet anormal hacim hareketi tespit edildi! Balinalar hareket halinde.")
+                    st.table(pd.DataFrame(balinalar).set_index("Sembol"))
+                else:
+                    st.info("Şu an piyasada olağandışı bir balina hareketi (anormal hacim) tespit edilmedi.")
+
+    with tab_duygu:
+        st.subheader("🌡️ Piyasa Duygu Ölçer (Korku ve Açgözlülük)")
+        st.markdown("Ana piyasa yapıcı varlıkların momentumu analiz edilerek **Korku** ve **Açgözlülük** endeksi hesaplanır. Piyasada mantık değil, psikoloji satar.")
+        
+        if st.button("🌡️ Psikolojiyi Ölç"):
+            with st.spinner("Yatırımcı psikolojisi analiz ediliyor..."):
+                rsi_degerleri = []
+                for s in ["THYAO.IS", "BTC-USD", "AAPL", "TUPRS.IS"]: 
+                    try:
+                        d = yf.Ticker(s).history(period="1mo")
+                        if len(d) > 15:
+                            delta = d['Close'].diff()
+                            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                            rs = gain / loss
+                            rsi = 100 - (100 / (1 + rs.iloc[-1]))
+                            rsi_degerleri.append(rsi)
+                    except: pass
                 
-                st.dataframe(df_hm.sort_values(by="Degisim", ascending=False), use_container_width=True)
-            else: st.error("Veri çekilemedi.")
+                if rsi_degerleri:
+                    avg_rsi = sum(rsi_degerleri) / len(rsi_degerleri)
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode = "gauge+number",
+                        value = avg_rsi,
+                        title = {'text': "Korku / Açgözlülük İbresi"},
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        gauge = {
+                            'axis': {'range': [0, 100]},
+                            'bar': {'color': "darkblue"},
+                            'steps': [
+                                {'range': [0, 40], 'color': "red"},
+                                {'range': [40, 60], 'color': "yellow"},
+                                {'range': [60, 100], 'color': "green"}],
+                            'threshold' : {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': avg_rsi}
+                        }
+                    ))
+                    fig_gauge.update_layout(template="plotly_dark", height=400)
+                    st.plotly_chart(fig_gauge, use_container_width=True)
+                    
+                    if avg_rsi < 40: 
+                        st.error("🚨 **Piyasa Durumu: AŞIRI KORKU**\nKanlı sokaklar... Büyük paranın dipten toplama alanı. Warren Buffett der ki: 'Başkaları korkarken açgözlü olun.'")
+                    elif avg_rsi > 60: 
+                        st.success("🤑 **Piyasa Durumu: AŞIRI AÇGÖZLÜLÜK**\nZirve coşkusu hakim. Herkes alım yapıyor, bu genellikle bir kâr satışı düzeltmesinin (şelalenin) yaklaştığını gösterir.")
+                    else: 
+                        st.warning("⚖️ **Piyasa Durumu: NÖTR**\nYatırımcılar yön arayışında. Kararsız ve yatay bir bekleyiş var.")
+                else:
+                    st.error("Duygu ölçer için yeterli veri alınamadı.")
+
     footer_ekle()
 
 # --- SAYFA: PORTFÖYÜM ---
