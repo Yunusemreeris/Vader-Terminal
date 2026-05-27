@@ -16,7 +16,7 @@ import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 # initial_sidebar_state="auto" yaparak menü tuşunun her zaman orada kalmasını garantiliyoruz.
-st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
 # CSS Kalkanını sadece içerik için kullan, menü tuşuna dokunma!
 gizleme_kodu = """
