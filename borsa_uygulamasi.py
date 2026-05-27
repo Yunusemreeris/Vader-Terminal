@@ -15,17 +15,15 @@ import base64
 import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
+# initial_sidebar_state="expanded" ile menünün her zaman açık kalmasını garantiliyoruz!
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Agresif Gizleme Kalkanı
+# MASUM KALKAN: Sadece alttaki Streamlit yazısını ve Deploy butonunu gizler. Sol menüye ASLA DOKUNMAZ!
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
-            [data-testid="stToolbar"] {display: none !important;}
-            [data-testid="stDecoration"] {display: none !important;}
             .stDeployButton {display: none !important;}
-            header .st-emotion-cache-1cvow4s {display: none !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
@@ -185,24 +183,6 @@ def rapor_olustur_html(hisse, fiyat, degisim_yuzde, rsi, yorumlar):
     b64 = base64.b64encode(html_icerik.encode()).decode()
     return f'<a href="data:text/html;base64,{b64}" download="VADER_Rapor_{hisse}.html" style="background-color:#00FFCC; color:black; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">📄 Raporu İndir (HTML/PDF)</a>'
 
-def ai_teknik_yorum(df, rsi, macd, signal):
-    yorumlar = []
-    fiyat = df['Close'].iloc[-1]
-    sma20 = df['Close'].rolling(20).mean().iloc[-1]
-    sma50 = df['Close'].rolling(50).mean().iloc[-1]
-
-    if fiyat > sma20 and fiyat > sma50: yorumlar.append("🟢 **Trend Analizi:** Fiyat, hem 20 hem de 50 günlük hareketli ortalamalarının üzerinde. Güçlü bir Yükseliş Trendi (Boğa) hakim.")
-    elif fiyat < sma20 and fiyat < sma50: yorumlar.append("🔴 **Trend Analizi:** Fiyat ortalamaların altında eziliyor. Güçlü bir Düşüş Trendi (Ayı) var.")
-    else: yorumlar.append("🟡 **Trend Analizi:** Fiyat ortalamalar arasında sıkışmış. Yön arayışı sürüyor (Konsolidasyon).")
-
-    if rsi > 70: yorumlar.append("🔴 **Momentum (RSI):** RSI 70'in üzerinde (Aşırı Alım). Piyasada FOMO var, düzeltme gelebilir.")
-    elif rsi < 30: yorumlar.append("🟢 **Momentum (RSI):** RSI 30'un altında (Aşırı Satım). Panik satışı olmuş, tepki fırsatı olabilir.")
-    else: yorumlar.append("⚪ **Momentum (RSI):** RSI dengeli bir bölgede ilerliyor.")
-
-    if macd > signal: yorumlar.append("🟢 **İvme (MACD):** MACD sinyal çizgisini yukarı kesmiş, pozitif ivme var.")
-    else: yorumlar.append("🔴 **İvme (MACD):** MACD sinyal çizgisinin altında, satış baskısı devam ediyor.")
-    return yorumlar
-
 def footer_ekle():
     st.markdown("---")
     st.markdown(f"<p style='text-align: center; color: gray;'>Copyright © {datetime.now().year} Yunus Emre Eriş - Vader Analiz Terminali | Tüm Hakları Saklıdır.</p>", unsafe_allow_html=True)
@@ -226,7 +206,6 @@ if st.session_state.kullanici:
         st.session_state.kullanici = None
         st.session_state.user_id = None
         st.session_state.uyelik_tipi = "free"
-        
         time.sleep(1.5)
         st.rerun()
 
@@ -274,7 +253,6 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
                         cookie_manager.set("vader_mail", response.user.email, max_age=2592000, key="giris_1")
                         cookie_manager.set("vader_id", response.user.id, max_age=2592000, key="giris_2")
                     except: pass
-                    
                     st.success("Giriş başarılı! Yönlendiriliyorsunuz...")
                     time.sleep(1.5)
                     st.rerun()
@@ -362,7 +340,17 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             anlik_macd = macd.iloc[-1]
             anlik_signal = signal.iloc[-1]
             
-            ai_yorum_listesi = ai_teknik_yorum(df, anlik_rsi, anlik_macd, anlik_signal)
+            def ai_teknik_yorum_fonk(df, rsi, macd, signal):
+                yorumlar = []
+                fiyat = df['Close'].iloc[-1]
+                sma20 = df['Close'].rolling(20).mean().iloc[-1]
+                sma50 = df['Close'].rolling(50).mean().iloc[-1]
+                if fiyat > sma20 and fiyat > sma50: yorumlar.append("🟢 Güçlü Yükseliş Trendi.")
+                elif fiyat < sma20 and fiyat < sma50: yorumlar.append("🔴 Güçlü Düşüş Trendi.")
+                else: yorumlar.append("🟡 Yatay Seyir (Konsolidasyon).")
+                return yorumlar
+                
+            ai_yorum_listesi = ai_teknik_yorum_fonk(df, anlik_rsi, anlik_macd, anlik_signal)
             
             c_h, c_r = st.columns([3, 1])
             with c_r:
@@ -439,28 +427,18 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             with t4: 
                 st.subheader("🔮 Yapay Zeka Gelecek Simülasyonu (Pro Monte Carlo)")
                 if is_premium:
-                    st.markdown("Hissenin son 1 yıllık hareketleri kullanılarak aynı anda **100 farklı paralel evren** simüle edilmiş ve yüksek ihtimalli rota hesaplanmıştır.")
                     log_returns = np.log(1 + df['Close'].pct_change()).dropna()
-                    u = log_returns.mean()
-                    var = log_returns.var()
-                    stdev = log_returns.std()
-                    
+                    u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
                     son_20_getiri = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1 if len(df) >= 20 else 0
                     drift = (u - (0.5 * var)) * 0.4 + ((son_20_getiri / 20) * 0.6)
-
                     gun = 30
                     sims = np.zeros((gun, 100))
                     sims[0] = fiyat
-                    
                     np.random.seed(int(fiyat * 100))
                     for t in range(1, gun): sims[t] = sims[t - 1] * np.exp(drift + stdev * np.random.standard_normal(100))
                     np.random.seed()
-                    
-                    med = np.percentile(sims, 50, axis=1)
-                    iyi = np.percentile(sims, 95, axis=1)
-                    kotu = np.percentile(sims, 5, axis=1)
+                    med, iyi, kotu = np.percentile(sims, 50, axis=1), np.percentile(sims, 95, axis=1), np.percentile(sims, 5, axis=1)
                     tarihler = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=gun)
-                    
                     fig_mc = go.Figure()
                     fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Geçmiş'))
                     fig_mc.add_trace(go.Scatter(x=tarihler, y=iyi, line=dict(color='rgba(0, 255, 0, 0.4)', dash='dot'), name='İyimser'))
@@ -468,52 +446,33 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     fig_mc.add_trace(go.Scatter(x=tarihler, y=med, line=dict(color='#00FFCC', width=3), name='Medyan Rota'))
                     fig_mc.update_layout(template=tema, height=450, hovermode="x unified")
                     st.plotly_chart(fig_mc, use_container_width=True)
-                    
-                    st.markdown("---")
-                    st.subheader("🎯 Yatırım Zaman Makinesi")
-                    yatirim = st.slider("1 Yıl Önce Ne Kadar Yatırsaydım:", 1000, 1000000, 10000, 1000)
-                    g_f = df['Close'].iloc[-252] if len(df) >= 252 else df['Close'].iloc[0]
-                    st.success(f"1 yıl önce **{para_birimi}{g_f:.2f}** fiyattan alınan varlığın bugünkü değeri: **{para_birimi}{(yatirim / g_f) * fiyat:,.2f}**")
-                else:
-                    st.error("🔒 Bu özellik sadece Premium Abonelere özeldir.")
-                    st.write("Yapay Zeka (Monte Carlo) simülasyonları ile hissenin rotasını görmek için Premium'a geçmelisiniz.")
-                    if st.button("💎 Premium Satın Al"): st.info("İletişim: yunusemreeris787@gmail.com")
+                else: st.error("🔒 Bu özellik sadece Premium Abonelere özeldir.")
 
             with t5:
-                # YENİ CANLI HABER ARAYÜZÜ
                 c_hab1, c_hab2 = st.columns([3, 1])
                 c_hab1.subheader("📡 Canlı Haber Radarı")
-                
                 if c_hab2.button("🔄 Radarı Yenile", key="haber_yenile_btn"):
                     son_dakika_haberleri.clear() 
                     st.rerun() 
-                
                 st.markdown("---")
-                
                 if haberler:
                     for h in haberler[:8]:
                         b = h.get('title', 'Başlık Yok')
-                        if 'custom_time' in h:
-                            y_v = h['custom_time']
-                        else:
-                            y_v = datetime.fromtimestamp(h.get('providerPublishTime', 0)).strftime('%d.%m.%Y %H:%M') if h.get('providerPublishTime') else "Yeni"
-                            
+                        y_v = h.get('custom_time', datetime.fromtimestamp(h.get('providerPublishTime', 0)).strftime('%d.%m.%Y %H:%M') if h.get('providerPublishTime') else "Yeni")
                         with st.expander(f"{duygu_analizi(b)} | {b}"):
                             st.write(f"**Kaynak:** {h.get('publisher', 'Bilinmeyen')} | **Tarih:** {y_v}")
                             st.write(f"[Haberi Oku]({h.get('link', '#')})")
-                else: 
-                    st.info("Son 24 saat içinde bu varlık için önemli bir haber düşmedi.")
+                else: st.info("Son 24 saat içinde bu varlık için önemli bir haber düşmedi.")
 
             with t6:
                 st.subheader("📑 Finansal Tablolar ve Bilanço")
                 tablo_secim = st.radio("İncelemek İstediğiniz Tabloyu Seçin:", ["Yıllık Bilanço", "Dönem İçi (Çeyreklik)", "Gelir Tablosu"], horizontal=True)
-                
                 aktif_t = bilanco if tablo_secim == "Yıllık Bilanço" else (ceyreklik_bilanco if tablo_secim == "Dönem İçi (Çeyreklik)" else gelir)
                 if not aktif_t.empty:
                     aktif_t.columns = [str(col).split()[0] for col in aktif_t.columns]
                     try: st.dataframe(aktif_t.map(rakam_formatla), use_container_width=True)
                     except AttributeError: st.dataframe(aktif_t.applymap(rakam_formatla), use_container_width=True)
-                else: st.warning("⚠️ Seçilen finansal veriler, Yahoo Finance tarafından anlık olarak gizlenmiş veya kısıtlanmış olabilir.")
+                else: st.warning("⚠️ Finansal veriler Yahoo Finance tarafından anlık olarak gizlenmiş olabilir.")
 
             with t7: 
                 st.subheader(f"🧠 Vader AI - {hisse_kod} Özel Asistanı")
@@ -521,29 +480,19 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     st.markdown("Bana hissenin güncel durumu hakkında teknik sorular sorabilirsin.")
                     k_s = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hissenin grafiği nasıl, yönü ne?")
                     if st.button("Analiz Et"):
-                        if k_s:
-                            s = k_s.lower()
-                            cevap = f"**Vader'ın Teknik Analizi:**\n\n- Hissenin anlık RSI puanı **{anlik_rsi:.2f}**.\n"
-                            if anlik_rsi > 70: cevap += "- 🚨 Aşırı Alım bölgesinde! Riskli (Pahalı).\n"
-                            elif anlik_rsi < 30: cevap += "- 🟢 Aşırı Satım bölgesinde! Dip seviyelerde (Ucuz).\n"
-                            else: cevap += "- ⚪ Hisse şu an nötr bölgede.\n"
-                            if anlik_macd > anlik_signal: cevap += "- Kısa vadeli MACD sinyali AL veriyor.\n"
-                            else: cevap += "- Kısa vadeli MACD sinyali SAT veriyor.\n"
-                            st.info(cevap)
-                else:
-                    st.error("🔒 Vader AI Asistanı sadece Premium Abonelere özeldir.")
-                    st.write("Yapay zekaya hisse hakkında dilediğinizi sormak için Premium'a geçmelisiniz.")
+                        cevap = f"**Vader'ın Teknik Analizi:**\n\n- Hissenin anlık RSI puanı **{anlik_rsi:.2f}**.\n"
+                        cevap += "- 🚨 Aşırı Alım bölgesinde! Riskli.\n" if anlik_rsi > 70 else ("- 🟢 Aşırı Satım bölgesinde! Ucuz.\n" if anlik_rsi < 30 else "- ⚪ Hisse şu an nötr bölgede.\n")
+                        cevap += "- Kısa vadeli MACD sinyali AL veriyor.\n" if anlik_macd > anlik_signal else "- Kısa vadeli MACD sinyali SAT veriyor.\n"
+                        st.info(cevap)
+                else: st.error("🔒 Vader AI Asistanı sadece Premium Abonelere özeldir.")
 
-        else:
-            st.error("Veri çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması var.")
-    except Exception as e:
-        st.error(f"Sistem Hatası: {e}")
+        else: st.error("Veri çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması var.")
+    except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
 # --- SAYFA: İZLEME LİSTEM ---
 elif sayfa == "⭐ İzleme Listem":
     st.title("Kişisel İzleme Listeniz")
-    st.markdown("Favoriye aldığınız tüm varlıkları tek ekranda takip edin.")
     if st.session_state.kullanici:
         try:
             liste = supabase.table("izleme_listesi").select("sembol").eq("user_id", st.session_state.user_id).execute()
@@ -552,20 +501,16 @@ elif sayfa == "⭐ İzleme Listem":
                     s = kalem['sembol']
                     d = yf.Ticker(s).history(period="2d")
                     if not d.empty and len(d) >= 2:
-                        son = d['Close'].iloc[-1]
-                        eski = d['Close'].iloc[-2]
+                        son, eski = d['Close'].iloc[-1], d['Close'].iloc[-2]
                         yuzde = ((son - eski) / eski) * 100
                         para_b = "₺" if ".IS" in s else "$"
-                        
                         c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
                         c1.markdown(f"<h3 style='color: #00FFCC;'>{s}</h3>", unsafe_allow_html=True)
                         c2.metric("Anlık Fiyat", f"{para_b}{son:,.2f}", f"{son-eski:+.2f} ({yuzde:+.2f}%)")
-                        
                         renk = "green" if yuzde >= 0 else "red"
                         fig = go.Figure(go.Scatter(y=d['Close'], mode='lines', line=dict(color=renk, width=3)))
                         fig.update_layout(height=80, margin=dict(l=0, r=0, t=0, b=0), xaxis=dict(visible=False), yaxis=dict(visible=False), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
                         with c3: st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                        
                         with c4:
                             st.write("")
                             if st.button("❌", key=f"delfav_{s}"):
@@ -580,54 +525,37 @@ elif sayfa == "⭐ İzleme Listem":
 # --- SAYFA: RAKİP ANALİZİ ---
 elif sayfa == "⚔️ Rakip Analizi":
     st.title("⚔️ Sektörel Çarpışma: Rakip Analizi")
-    st.markdown("İki farklı şirketi veya varlığı aynı ringe çıkarın.")
-    
     colA, colB = st.columns(2)
     with colA: h1 = st.text_input("1. Varlık (Örn: FROTO.IS):", "FROTO.IS").upper()
     with colB: h2 = st.text_input("2. Varlık (Örn: TOASO.IS):", "TOASO.IS").upper()
-    
     if st.button("Çarpıştır ⚡"):
         try:
             df1, _, _, _, _ = veri_motoru(h1, "1y", "1d")
             df2, _, _, _, _ = veri_motoru(h2, "1y", "1d")
-            
             if not df1.empty and not df2.empty:
-                st.subheader("📊 Teknik Veri Karşılaştırması")
                 getiri1 = ((df1['Close'].iloc[-1] - df1['Close'].iloc[0]) / df1['Close'].iloc[0]) * 100
                 getiri2 = ((df2['Close'].iloc[-1] - df2['Close'].iloc[0]) / df2['Close'].iloc[0]) * 100
-                
-                def calc_rsi(d):
-                    delta = d['Close'].diff()
-                    rs = (delta.where(delta > 0, 0)).rolling(14).mean() / (-delta.where(delta < 0, 0)).rolling(14).mean()
-                    return 100 - (100 / (1 + rs.iloc[-1]))
-
                 comp_data = {
-                    "Metrik": ["Anlık Fiyat", "Son 1 Yıl Getirisi", "RSI (Momentum)", "Günlük Hacim"],
-                    h1: [f"{df1['Close'].iloc[-1]:,.2f}", f"%{getiri1:.2f}", f"{calc_rsi(df1):.2f}", f"{int(df1['Volume'].iloc[-1]):,}"],
-                    h2: [f"{df2['Close'].iloc[-1]:,.2f}", f"%{getiri2:.2f}", f"{calc_rsi(df2):.2f}", f"{int(df2['Volume'].iloc[-1]):,}"]
+                    "Metrik": ["Anlık Fiyat", "Son 1 Yıl Getirisi", "Günlük Hacim"],
+                    h1: [f"{df1['Close'].iloc[-1]:,.2f}", f"%{getiri1:.2f}", f"{int(df1['Volume'].iloc[-1]):,}"],
+                    h2: [f"{df2['Close'].iloc[-1]:,.2f}", f"%{getiri2:.2f}", f"{int(df2['Volume'].iloc[-1]):,}"]
                 }
                 st.table(pd.DataFrame(comp_data).set_index("Metrik"))
-                
-                st.subheader("📈 Performans Çarpışması (Son 1 Yıl Normalize Getiri)")
                 df1['Normalize'] = (df1['Close'] / df1['Close'].iloc[0] - 1) * 100
                 df2['Normalize'] = (df2['Close'] / df2['Close'].iloc[0] - 1) * 100
-                
                 fig_comp = go.Figure()
                 fig_comp.add_trace(go.Scatter(x=df1.index, y=df1['Normalize'], name=h1, line=dict(color='#00FFCC', width=2)))
                 fig_comp.add_trace(go.Scatter(x=df2.index, y=df2['Normalize'], name=h2, line=dict(color='orange', width=2)))
                 fig_comp.update_layout(template="plotly_dark", height=400, yaxis_title="Getiri (%)", hovermode="x unified")
                 st.plotly_chart(fig_comp, use_container_width=True)
             else: st.error("Varlıklardan birinin verisi çekilemedi.")
-        except: st.error("Hata oluştu. Doğru yazdığınızdan emin olun.")
+        except: st.error("Hata oluştu.")
     footer_ekle()
 
 # --- SAYFA: PİYASA RADARI ---
 elif sayfa == "📡 Piyasa Radarı & Isı Haritası":
     st.title("🗺️ Piyasa Isı Haritası & Radar")
-    st.markdown("Yeşil kutular yükselişi, kırmızı kutular düşüşü temsil eder.")
-    
     radar_listesi = ["THYAO.IS", "SASA.IS", "EREGL.IS", "TUPRS.IS", "FROTO.IS", "BTC-USD", "ETH-USD", "GC=F", "AAPL", "NVDA", "TSLA"]
-    
     if st.button("🚀 Haritayı & Radarı Çalıştır"):
         with st.spinner("Piyasa röntgeni çekiliyor..."):
             harita_datalari = []
@@ -635,43 +563,35 @@ elif sayfa == "📡 Piyasa Radarı & Isı Haritası":
                 try:
                     df = yf.Ticker(sembol).history(period="5d")
                     if len(df) >= 2:
-                        son = df['Close'].iloc[-1]
-                        eski = df['Close'].iloc[-2]
-                        yuzde = ((son - eski) / eski) * 100
-                        hacim = df['Volume'].iloc[-1]
-                        grup = "Kripto" if "-USD" in sembol else ("ABD" if not ".IS" in sembol and "F" not in sembol else "BIST")
-                        
+                        son, eski = df['Close'].iloc[-1], df['Close'].iloc[-2]
                         harita_datalari.append({
-                            "Hisse": sembol.replace(".IS", ""), "Degisim": round(yuzde, 2),
-                            "Hacim": hacim, "Fiyat": round(son, 2), "Grup": grup
+                            "Hisse": sembol.replace(".IS", ""), "Degisim": round(((son - eski) / eski) * 100, 2),
+                            "Hacim": df['Volume'].iloc[-1], "Fiyat": round(son, 2), 
+                            "Grup": "Kripto" if "-USD" in sembol else ("ABD" if not ".IS" in sembol and "F" not in sembol else "BIST")
                         })
                 except: pass
-            
             if harita_datalari:
                 df_hm = pd.DataFrame(harita_datalari)
                 fig_hm = px.treemap(df_hm, path=['Grup', 'Hisse'], values='Hacim', color='Degisim', color_continuous_scale='RdYlGn', color_continuous_midpoint=0, custom_data=['Fiyat', 'Degisim'])
                 fig_hm.update_traces(texttemplate="<b>%{label}</b><br>%{customdata[0]}<br>%{customdata[1]:.2f}%", textposition="middle center")
                 fig_hm.update_layout(template="plotly_dark", height=600, margin=dict(t=10, l=10, r=10, b=10))
                 st.plotly_chart(fig_hm, use_container_width=True)
-                st.dataframe(df_hm.sort_values(by="Degisim", ascending=False), use_container_width=True)
             else: st.error("Veri çekilemedi.")
     footer_ekle()
 
 # --- SAYFA: PORTFÖYÜM ---
 elif sayfa == "💼 Portföyüm":
     st.title("💼 Şahsi Bulut Portföyünüz")
-    if st.session_state.kullanici is None: st.warning("Bu sayfayı görüntülemek için giriş yapmalısınız.")
+    if st.session_state.kullanici is None: st.warning("Giriş yapmalısınız.")
     else:
         with st.expander("➕ Portföye Yeni Hisse Ekle", expanded=False):
             with st.form("hisse_ekle_form"):
                 yeni_kod = st.text_input("Varlık Kodu (Örn: SASA.IS, AAPL):").upper()
                 yeni_maliyet = st.number_input("Maliyet (Birim Fiyat)", min_value=0.0, step=1.0)
                 yeni_lot = st.number_input("Adet (Lot)", min_value=1.0, step=0.1)
-                ekle_btn = st.form_submit_button("Veritabanına Kaydet")
-                if ekle_btn and yeni_kod:
+                if st.form_submit_button("Kaydet") and yeni_kod:
                     try:
-                        veri = {"user_id": st.session_state.user_id, "hisse_kod": yeni_kod, "maliyet": yeni_maliyet, "lot": yeni_lot}
-                        supabase.table("portfoyler").insert(veri).execute()
+                        supabase.table("portfoyler").insert({"user_id": st.session_state.user_id, "hisse_kod": yeni_kod, "maliyet": yeni_maliyet, "lot": yeni_lot}).execute()
                         st.success("Kaydedildi!")
                         st.rerun()
                     except Exception as e: st.error(f"Hata: {e}")
@@ -681,7 +601,6 @@ elif sayfa == "💼 Portföyüm":
             veriler = supabase.table("portfoyler").select("*").eq("user_id", st.session_state.user_id).execute()
             if veriler.data:
                 df_port = pd.DataFrame(veriler.data)
-                
                 toplam_maliyet_genel, toplam_guncel_genel, toplam_temettu = 0, 0, 0
                 pasta_etiketler, pasta_degerler, gecerli_veriler = [], [], []
 
@@ -689,60 +608,33 @@ elif sayfa == "💼 Portföyüm":
                     try:
                         h = yf.Ticker(row['hisse_kod'])
                         anlik_fiyat = h.history(period="5d")['Close'].iloc[-1]
-                        try:
-                            div_yield = h.info.get('dividendYield', 0)
-                            if div_yield: toplam_temettu += (anlik_fiyat * div_yield) * row['lot']
-                        except: pass
-                        guncel_deger = anlik_fiyat * row['lot']
-                        toplam_maliyet = row['maliyet'] * row['lot']
-                        kar = guncel_deger - toplam_maliyet
-                        kar_yuzde = (kar / toplam_maliyet) * 100 if toplam_maliyet > 0 else 0
+                        guncel_deger, toplam_maliyet = anlik_fiyat * row['lot'], row['maliyet'] * row['lot']
                         toplam_maliyet_genel += toplam_maliyet
                         toplam_guncel_genel += guncel_deger
                         pasta_etiketler.append(row['hisse_kod'])
                         pasta_degerler.append(guncel_deger)
-                        gecerli_veriler.append({'id': row['id'], 'hisse_kod': row['hisse_kod'], 'maliyet': row['maliyet'], 'lot': row['lot'], 'guncel_deger': guncel_deger, 'kar': kar, 'kar_yuzde': kar_yuzde})
+                        gecerli_veriler.append({'id': row['id'], 'hisse_kod': row['hisse_kod'], 'maliyet': row['maliyet'], 'lot': row['lot'], 'guncel_deger': guncel_deger, 'kar': guncel_deger - toplam_maliyet})
                     except: pass
                 
                 if gecerli_veriler:
-                    st.markdown("---")
                     ozet_col, pie_col = st.columns([1, 1.5])
                     with ozet_col:
-                        st.markdown("### 💰 Toplam Portföy Durumu")
                         toplam_kar_genel = toplam_guncel_genel - toplam_maliyet_genel
-                        toplam_kar_yuzde = (toplam_kar_genel / toplam_maliyet_genel) * 100 if toplam_maliyet_genel > 0 else 0
                         st.metric("Toplam Yatırım Maliyeti", f"{toplam_maliyet_genel:,.2f}")
                         st.metric("Toplam Güncel Bakiye", f"{toplam_guncel_genel:,.2f}")
-                        st.metric("Total Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f} ({toplam_kar_yuzde:+.2f}%)")
-                        st.markdown("---")
-                        st.markdown("### 💸 Temettü Simülatörü")
-                        st.success(f"Tahmini Yıllık Pasif Gelir: **{toplam_temettu:,.2f}**")
-
+                        st.metric("Total Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f}")
                     with pie_col:
                         fig_pie = go.Figure(data=[go.Pie(labels=pasta_etiketler, values=pasta_degerler, hole=.4, textinfo='label+percent')])
                         fig_pie.update_layout(title_text="💼 Varlık Dağılımı", template="plotly_dark", height=350, margin=dict(t=40, b=10, l=10, r=10))
                         st.plotly_chart(fig_pie, use_container_width=True)
                     
                     st.markdown("---")
-                    st.subheader("🧠 Vader Portföy Röntgeni")
-                    if is_premium:
-                        if len(pasta_etiketler) <= 2: st.warning("⚠️ **Risk Uyarısı:** Varlık sayınız çok az. Çeşitliliği artırmanı öneririm.")
-                        else: st.info(f"✅ **Dağılım Başarılı:** Sepetinizde {len(pasta_etiketler)} farklı varlık var.")
-                        en_buyuk_index = np.argmax(pasta_degerler)
-                        st.write(f"- En büyük ağırlık **%{ (pasta_degerler[en_buyuk_index] / sum(pasta_degerler)) * 100 :.1f}** ile **{pasta_etiketler[en_buyuk_index]}**.")
-                        if toplam_kar_genel > 0: st.write("- 🟢 Yatırım stratejiniz kârlı ilerliyor.")
-                        else: st.write("- 🔴 Genel portföy şu an zararda. Maliyet düşürmek değerlendirilebilir.")
-                    else:
-                        st.error("🔒 Yapay Zeka Portföy Röntgeni sadece Premium Abonelere özeldir.")
-
-                    st.markdown("---")
-                    st.markdown("### 📋 Varlık Detayları")
                     for v in gecerli_veriler:
                         c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 1.5, 2.5, 1])
                         c1.write(f"**{v['hisse_kod']}**")
                         c2.write(f"Maliyet: {v['maliyet']:,.2f}")
                         c3.write(f"Lot: {v['lot']}")
-                        c4.metric("Güncel & Kar", f"{v['guncel_deger']:,.2f}", f"{v['kar']:+,.2f} ({v['kar_yuzde']:+.2f}%)")
+                        c4.metric("Güncel & Kar", f"{v['guncel_deger']:,.2f}", f"{v['kar']:+,.2f}")
                         if c5.button("Sil", key=f"del_port_{v['id']}"):
                             supabase.table("portfoyler").delete().eq("id", v['id']).execute()
                             st.rerun()
@@ -751,46 +643,16 @@ elif sayfa == "💼 Portföyüm":
         except Exception as e: st.error(f"Hata: {e}")
     footer_ekle()
 
-# --- SAYFA: HESABIM ---
+# --- SAYFA: HESABIM & HAKKIMDA ---
 elif sayfa == "👤 Hesabım":
     st.title("Profil ve Üyelik Yönetimi")
     if st.session_state.kullanici:
-        st.markdown(f"""
-        ### Hesap Bilgileri
-        - **E-posta Adresi:** {st.session_state.kullanici}
-        - **Kayıt ID:** {st.session_state.user_id[:8]}...
-        - **Mevcut Paket:** {'💎 Premium (Tam Erişim)' if is_premium else '👤 Ücretsiz (Free)'}
-        """)
-        
-        st.markdown("---")
-        if not is_premium:
-            st.error("🔒 Hesabınız Standart (Ücretsiz) Planda.")
-            st.markdown("""
-            **Premium Avantajları:**
-            * Yapay Zeka (Vader AI) ile anında sohbet ve teknik analiz asistanı
-            * Çoklu Evren (Monte Carlo) Algoritması ile gelecek projeksiyonu
-            * Portföyünüz için Profesyonel Yapay Zeka Röntgeni ve Tavsiyeler
-            """)
-            if st.button("💎 Premium'a Yükselt"):
-                st.success("Satın alım sayfasına yönlendiriliyorsunuz... (Yakında aktif!)")
-                st.info("Bu süreçte yükseltme için bana yazabilirsin: yunusemreeris787@gmail.com")
-        else:
-            st.success("👑 VIP Ayrıcalığı: Hesabınızda Tüm Premium özellikler aktiftir.")
-            
-    else: st.warning("Bu sayfayı görmek için giriş yapmalısınız.")
+        st.markdown(f"**E-posta Adresi:** {st.session_state.kullanici}")
+        st.markdown(f"**Mevcut Paket:** {'💎 Premium' if is_premium else '👤 Ücretsiz'}")
+    else: st.warning("Giriş yapmalısınız.")
     footer_ekle()
 
-# --- SAYFA: HAKKIMDA ---
 elif sayfa == "📩 Hakkımda & İletişim":
     st.title("👨‍💻 Geliştirici Hakkında")
-    st.markdown(f"""
-    **Vader Analiz Terminali**, Bursa Uludağ Üniversitesi İİBF öğrencisi **Yunus Emre Eriş** tarafından geliştirilmiş profesyonel bir borsa ve global piyasalar analiz projesidir.
-    
-    ### Vizyonumuz
-    Yatırımcılara şeffaf, hızlı ve yapay zeka destekli analiz araçları sunarak finansal okuryazarlığı artırmak ve bilgiye dayalı kararlar almalarını sağlamak.
-    
-    ### İletişim & İş Birliği
-    Reklam, sponsorluk veya teknik destek için:
-    - **E-posta:** yunusemreeris787@gmail.com
-    """)
+    st.markdown("**Vader Analiz Terminali**, Bursa Uludağ Üniversitesi İİBF öğrencisi **Yunus Emre Eriş** tarafından geliştirilmiştir.\n\nİletişim: yunusemreeris787@gmail.com")
     footer_ekle()
