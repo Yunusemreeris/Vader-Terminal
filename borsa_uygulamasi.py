@@ -115,6 +115,24 @@ def piyasa_alarmlari():
         except: pass
     return alarmlar if alarmlar else ["Piyasa şu an sakin, olağanüstü bir hareket yok."]
 
+@st.cache_data(ttl=60) 
+def genel_piyasa_haberleri():
+    haberler = []
+    try:
+        url = "https://news.google.com/rss/search?q=borsa+ekonomi+finans+hisse+when:1d&hl=tr&gl=TR&ceid=TR:tr"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        xml_data = urllib.request.urlopen(req).read()
+        root = ET.fromstring(xml_data)
+        for item in root.findall('./channel/item')[:15]: 
+            haberler.append({
+                'title': item.find('title').text, 
+                'link': item.find('link').text, 
+                'publisher': item.find('source').text if item.find('source') is not None else "Google Haberler", 
+                'custom_time': item.find('pubDate').text
+            })
+    except: pass
+    return haberler
+
 @st.cache_data(ttl=30) 
 def son_dakika_haberleri(sembol):
     haberler = []
@@ -209,6 +227,7 @@ if st.session_state.kullanici:
 sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
     "🏠 Ana Sayfa & Giriş", 
     "📈 Canlı Analiz Terminali", 
+    "📰 Piyasa Haberleri",
     "⭐ İzleme Listem",
     "⚔️ Rakip Analizi",
     "📡 Piyasa Radarı & Isı Haritası",
@@ -487,7 +506,63 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- SAYFA: İZLEME LİSTEM (HATA DÜZELTMESİ EKLENDİ!) ---
+# --- YENİ SAYFA: PİYASA HABERLERİ ---
+elif sayfa == "📰 Piyasa Haberleri":
+    st.title("📰 Piyasa Haber Merkezi")
+    st.markdown("Global piyasaların nabzını ve portföyünüzün son durumunu anlık takip edin.")
+    
+    tab_genel, tab_izleme = st.tabs(["🌍 Genel Piyasa Gündemi", "⭐ İzleme Listem Haberleri"])
+    
+    with tab_genel:
+        c1, c2 = st.columns([4, 1])
+        c1.subheader("Borsa, Ekonomi ve Finans")
+        if c2.button("🔄 Gündemi Yenile", key="genel_h_yenile"):
+            genel_piyasa_haberleri.clear()
+            st.rerun()
+            
+        g_haberler = genel_piyasa_haberleri()
+        if g_haberler:
+            for h in g_haberler:
+                with st.expander(f"📰 {h.get('title', 'Başlık Yok')}"):
+                    st.write(f"**Kaynak:** {h.get('publisher', 'Bilinmeyen')} | **Tarih:** {h.get('custom_time', 'Yeni')}")
+                    st.write(f"[Habere Git]({h.get('link', '#')})")
+        else:
+            st.info("Şu an genel piyasa haberi çekilemedi.")
+            
+    with tab_izleme:
+        st.subheader("Sadece Takip Ettiğiniz Varlıkların Haberleri")
+        if st.session_state.kullanici:
+            try:
+                liste = supabase.table("izleme_listesi").select("sembol").eq("user_id", st.session_state.user_id).execute()
+                if liste.data:
+                    if st.button("🔄 İzleme Haberlerini Yenile", key="izleme_h_yenile"):
+                        son_dakika_haberleri.clear()
+                        st.rerun()
+                        
+                    for kalem in liste.data:
+                        s = kalem['sembol']
+                        st.markdown(f"### 📌 {s} Analiz ve Gündem")
+                        s_haberler = son_dakika_haberleri(s)
+                        if s_haberler:
+                            for h in s_haberler[:3]:
+                                b = h.get('title', 'Başlık Yok')
+                                y_v = h.get('custom_time', datetime.fromtimestamp(h.get('providerPublishTime', 0)).strftime('%d.%m.%Y %H:%M') if h.get('providerPublishTime') else "Yeni")
+                                with st.expander(f"{duygu_analizi(b)} | {b}"):
+                                    st.write(f"**Kaynak:** {h.get('publisher', 'Bilinmeyen')} | **Tarih:** {y_v}")
+                                    st.write(f"[Haberi Oku]({h.get('link', '#')})")
+                        else:
+                            st.info(f"{s} için son 24 saatte yeni haber düşmedi.")
+                        st.markdown("---")
+                else:
+                    st.warning("İzleme listeniz boş. Canlı Analiz ekranından yıldızlayarak hisse eklerseniz, onlara ait haberler buraya düşecektir.")
+            except Exception as e:
+                st.error("Veritabanına bağlanılırken bir hata oluştu.")
+        else:
+            st.error("İzleme listenizdeki varlıkların özel haberlerini görebilmek için üye girişi yapmalısınız.")
+            
+    footer_ekle()
+
+# --- SAYFA: İZLEME LİSTEM (HATA YAKALAYICISIYLA) ---
 elif sayfa == "⭐ İzleme Listem":
     st.title("Kişisel İzleme Listeniz")
     st.markdown("Favoriye aldığınız tüm varlıkları tek ekranda takip edin.")
