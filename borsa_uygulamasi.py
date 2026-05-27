@@ -17,11 +17,12 @@ import streamlit.components.v1 as components
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Akıllı ve Zararsız Gizleme Kalkanı (Menü tuşuna KESİNLİKLE dokunmaz)
+# Kusursuz Gizleme Kalkanı (Sağ üstü vurur, Sol menü okuna asla dokunmaz!)
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
+            [data-testid="stToolbar"] {visibility: hidden !important;}
             .stDeployButton {display: none !important;}
             </style>
             """
