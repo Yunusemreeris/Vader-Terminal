@@ -13,14 +13,15 @@ import extra_streamlit_components as stx
 import time
 import base64
 import streamlit.components.v1 as components
-import io
+import asyncio
+import os
 
-# Ses motoru çökme kalkanı (Eğer kütüphane yoksa siteyi çökertmez)
+# Yeni Nesil Ultra Gerçekçi Ses Motoru Kalkanı
 try:
-    from gtts import gTTS
-    HAS_GTTS = True
+    import edge_tts
+    HAS_EDGE_TTS = True
 except ImportError:
-    HAS_GTTS = False
+    HAS_EDGE_TTS = False
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
@@ -513,7 +514,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- YENİ SAYFA: PİYASA HABERLERİ & SESLİ BRİFİNG (EKLENTİ 4) ---
+# --- SAYFA: PİYASA HABERLERİ & SESLİ BRİFİNG ---
 elif sayfa == "📰 Piyasa Haberleri":
     st.title("📰 Piyasa Haber Merkezi & AI Brifing")
     st.markdown("Global piyasaların nabzını ve yapay zeka destekli güncel sesli özetleri takip edin.")
@@ -569,19 +570,32 @@ elif sayfa == "📰 Piyasa Haberleri":
             
     with tab_podcast:
         st.subheader("🎧 Vader Günlük Sesli Piyasa Özeti")
-        st.markdown("Yapay zeka tarafından hazırlanan güncel piyasa brifingini dinleyin (Kulaklıkları takın).")
+        st.markdown("Microsoft Edge Neural TTS altyapısı ile hazırlanan ultra gerçekçi sesli brifing.")
         
         if st.button("🎙️ Bugünkü Podcast'i Oluştur"):
-            if not HAS_GTTS:
-                st.error("⚠️ Ses motoru eksik! Lütfen GitHub'da 'requirements.txt' adında bir dosya oluşturup içine 'gTTS' yazın.")
+            if not HAS_EDGE_TTS:
+                st.error("⚠️ Ses motoru eksik! Lütfen GitHub'daki 'requirements.txt' dosyasına 'edge-tts' ekleyip kaydedin.")
             else:
-                with st.spinner("Vader metni sese döküyor, lütfen bekleyin..."):
+                with st.spinner("Vader stüdyoya girdi, kayıt alınıyor... (Bu işlem 5-10 saniye sürebilir)"):
                     try:
-                        metin = "Vader analiz terminaline hoş geldiniz patron. Bugün piyasalarda hareketli bir gün yaşanıyor. Lütfen risk yönetiminizi yapmayı unutmayın ve balina radarlarını kontrol edin. Bol kazançlar dilerim."
-                        tts = gTTS(text=metin, lang='tr')
-                        fp = io.BytesIO()
-                        tts.write_to_fp(fp)
-                        st.audio(fp)
+                        # Spiker metni
+                        metin = "Vader analiz terminaline hoş geldiniz patron. Bugün piyasalarda oldukça hareketli bir gün yaşanıyor. Lütfen risk yönetiminizi yapmayı unutmayın ve balina radarlarını düzenli olarak kontrol edin. Bol kazançlar dilerim, güç sizinle olsun."
+                        
+                        ses_dosyasi = "vader_brifing.mp3"
+                        
+                        # Edge-TTS Asenkron Çalıştırma Fonksiyonu
+                        async def ses_olustur():
+                            # tr-TR-AhmetNeural gerçekçi ve profesyonel bir erkek sesidir
+                            communicate = edge_tts.Communicate(metin, "tr-TR-AhmetNeural")
+                            await communicate.save(ses_dosyasi)
+                        
+                        # Streamlit içinde güvenli asenkron çalıştırma taktiği
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(ses_olustur())
+                        loop.close()
+                        
+                        st.audio(ses_dosyasi)
                         st.success("✅ Podcast hazır! Yukarıdaki oynatıcıdan dinleyebilirsiniz.")
                     except Exception as e:
                         st.error(f"Ses oluşturulurken hata: {e}")
@@ -665,7 +679,7 @@ elif sayfa == "⚔️ Rakip Analizi":
         except: st.error("Hata oluştu.")
     footer_ekle()
 
-# --- YENİ SAYFA: PİYASA RADARI & YENİ NESİL EKLENTİLER (EKLENTİ 2 VE 5) ---
+# --- SAYFA: PİYASA RADARI & YENİ NESİL EKLENTİLER ---
 elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
     st.title("🗺️ Piyasa Radarı & Eklentiler")
     
