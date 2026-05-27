@@ -17,13 +17,13 @@ import streamlit.components.v1 as components
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Cerrahi Gizleme Kalkanı (Sol menü okuna %100 dokunmaz)
+# Akıllı Gizleme Kalkanı (Menü açma tuşunu bozmaz, sadece sağ üstü temizler)
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
+            header [data-testid="stToolbar"] {display: none !important;}
             .stDeployButton {display: none !important;}
-            [data-testid="stHeaderActionElements"] {display: none !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
