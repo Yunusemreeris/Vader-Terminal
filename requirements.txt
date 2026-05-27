@@ -4,4 +4,4 @@ pandas
 plotly
 supabase
 extra-streamlit-components
-gTTS
+edge-tts
