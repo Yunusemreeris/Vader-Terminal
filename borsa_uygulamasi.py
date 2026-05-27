@@ -15,10 +15,9 @@ import base64
 import streamlit.components.v1 as components
 
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
-# initial_sidebar_state="expanded" ile menünün her zaman açık kalmasını garantiliyoruz!
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# MASUM KALKAN: Sadece alttaki Streamlit yazısını ve Deploy butonunu gizler. Sol menüye ASLA DOKUNMAZ!
+# MASUM KALKAN: Menüye dokunmaz, sadece reklamları gizler
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
@@ -116,7 +115,6 @@ def piyasa_alarmlari():
         except: pass
     return alarmlar if alarmlar else ["Piyasa şu an sakin, olağanüstü bir hareket yok."]
 
-# YENİ CANAVAR HABER MOTORU (Sadece son 24 saat)
 @st.cache_data(ttl=30) 
 def son_dakika_haberleri(sembol):
     haberler = []
@@ -124,7 +122,7 @@ def son_dakika_haberleri(sembol):
         try:
             arama_terimi = sembol.replace(".IS", "") + " hisse haber when:1d"
             url = f"https://news.google.com/rss/search?q={urllib.parse.quote(arama_terimi)}&hl=tr&gl=TR&ceid=TR:tr"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             xml_data = urllib.request.urlopen(req).read()
             root = ET.fromstring(xml_data)
             
@@ -144,7 +142,6 @@ def son_dakika_haberleri(sembol):
             for h in yh_news:
                 if 'title' in h and h['title']: haberler.append(h)
     except: pass
-    
     return haberler[:8]
 
 def duygu_analizi(metin):
@@ -177,7 +174,7 @@ def rapor_olustur_html(hisse, fiyat, degisim_yuzde, rsi, yorumlar):
             <h2>🧠 Vader AI Algoritmik Yorumu</h2>
             <ul>{''.join([f'<li>{y}</li>' for y in yorumlar])}</ul>
         </div>
-        <div class="footer">Bu belge Vader Analiz Terminali (Yunus Emre Eriş) tarafından otomatik üretilmiştir. Tarayıcınızda Ctrl+P yaparak PDF olarak kaydedebilirsiniz.</div>
+        <div class="footer">Bu belge otomatik üretilmiştir. Tarayıcınızda Ctrl+P yaparak PDF kaydedebilirsiniz.</div>
     </body></html>
     """
     b64 = base64.b64encode(html_icerik.encode()).decode()
@@ -535,12 +532,20 @@ elif sayfa == "⚔️ Rakip Analizi":
             if not df1.empty and not df2.empty:
                 getiri1 = ((df1['Close'].iloc[-1] - df1['Close'].iloc[0]) / df1['Close'].iloc[0]) * 100
                 getiri2 = ((df2['Close'].iloc[-1] - df2['Close'].iloc[0]) / df2['Close'].iloc[0]) * 100
+                
+                # EKSİK OLAN RSI HESAPLAYICISI GERİ GELDİ!
+                def calc_rsi(d):
+                    delta = d['Close'].diff()
+                    rs = (delta.where(delta > 0, 0)).rolling(14).mean() / (-delta.where(delta < 0, 0)).rolling(14).mean()
+                    return 100 - (100 / (1 + rs.iloc[-1]))
+
                 comp_data = {
-                    "Metrik": ["Anlık Fiyat", "Son 1 Yıl Getirisi", "Günlük Hacim"],
-                    h1: [f"{df1['Close'].iloc[-1]:,.2f}", f"%{getiri1:.2f}", f"{int(df1['Volume'].iloc[-1]):,}"],
-                    h2: [f"{df2['Close'].iloc[-1]:,.2f}", f"%{getiri2:.2f}", f"{int(df2['Volume'].iloc[-1]):,}"]
+                    "Metrik": ["Anlık Fiyat", "Son 1 Yıl Getirisi", "RSI (Momentum)", "Günlük Hacim"],
+                    h1: [f"{df1['Close'].iloc[-1]:,.2f}", f"%{getiri1:.2f}", f"{calc_rsi(df1):.2f}", f"{int(df1['Volume'].iloc[-1]):,}"],
+                    h2: [f"{df2['Close'].iloc[-1]:,.2f}", f"%{getiri2:.2f}", f"{calc_rsi(df2):.2f}", f"{int(df2['Volume'].iloc[-1]):,}"]
                 }
                 st.table(pd.DataFrame(comp_data).set_index("Metrik"))
+                
                 df1['Normalize'] = (df1['Close'] / df1['Close'].iloc[0] - 1) * 100
                 df2['Normalize'] = (df2['Close'] / df2['Close'].iloc[0] - 1) * 100
                 fig_comp = go.Figure()
@@ -576,13 +581,16 @@ elif sayfa == "📡 Piyasa Radarı & Isı Haritası":
                 fig_hm.update_traces(texttemplate="<b>%{label}</b><br>%{customdata[0]}<br>%{customdata[1]:.2f}%", textposition="middle center")
                 fig_hm.update_layout(template="plotly_dark", height=600, margin=dict(t=10, l=10, r=10, b=10))
                 st.plotly_chart(fig_hm, use_container_width=True)
+                
+                # EKSİK OLAN RADAR TABLOSU GERİ GELDİ!
+                st.dataframe(df_hm.sort_values(by="Degisim", ascending=False), use_container_width=True)
             else: st.error("Veri çekilemedi.")
     footer_ekle()
 
 # --- SAYFA: PORTFÖYÜM ---
 elif sayfa == "💼 Portföyüm":
     st.title("💼 Şahsi Bulut Portföyünüz")
-    if st.session_state.kullanici is None: st.warning("Giriş yapmalısınız.")
+    if st.session_state.kullanici is None: st.warning("Bu sayfayı görüntülemek için giriş yapmalısınız.")
     else:
         with st.expander("➕ Portföye Yeni Hisse Ekle", expanded=False):
             with st.form("hisse_ekle_form"):
@@ -601,6 +609,7 @@ elif sayfa == "💼 Portföyüm":
             veriler = supabase.table("portfoyler").select("*").eq("user_id", st.session_state.user_id).execute()
             if veriler.data:
                 df_port = pd.DataFrame(veriler.data)
+                
                 toplam_maliyet_genel, toplam_guncel_genel, toplam_temettu = 0, 0, 0
                 pasta_etiketler, pasta_degerler, gecerli_veriler = [], [], []
 
@@ -608,33 +617,68 @@ elif sayfa == "💼 Portföyüm":
                     try:
                         h = yf.Ticker(row['hisse_kod'])
                         anlik_fiyat = h.history(period="5d")['Close'].iloc[-1]
-                        guncel_deger, toplam_maliyet = anlik_fiyat * row['lot'], row['maliyet'] * row['lot']
+                        
+                        # EKSİK OLAN TEMETTÜ HESAPLAYICI GERİ GELDİ!
+                        try:
+                            div_yield = h.info.get('dividendYield', 0)
+                            if div_yield: toplam_temettu += (anlik_fiyat * div_yield) * row['lot']
+                        except: pass
+                        
+                        guncel_deger = anlik_fiyat * row['lot']
+                        toplam_maliyet = row['maliyet'] * row['lot']
+                        kar = guncel_deger - toplam_maliyet
+                        kar_yuzde = (kar / toplam_maliyet) * 100 if toplam_maliyet > 0 else 0
+                        
                         toplam_maliyet_genel += toplam_maliyet
                         toplam_guncel_genel += guncel_deger
                         pasta_etiketler.append(row['hisse_kod'])
                         pasta_degerler.append(guncel_deger)
-                        gecerli_veriler.append({'id': row['id'], 'hisse_kod': row['hisse_kod'], 'maliyet': row['maliyet'], 'lot': row['lot'], 'guncel_deger': guncel_deger, 'kar': guncel_deger - toplam_maliyet})
+                        gecerli_veriler.append({'id': row['id'], 'hisse_kod': row['hisse_kod'], 'maliyet': row['maliyet'], 'lot': row['lot'], 'guncel_deger': guncel_deger, 'kar': kar, 'kar_yuzde': kar_yuzde})
                     except: pass
                 
                 if gecerli_veriler:
+                    st.markdown("---")
                     ozet_col, pie_col = st.columns([1, 1.5])
                     with ozet_col:
+                        st.markdown("### 💰 Toplam Portföy Durumu")
                         toplam_kar_genel = toplam_guncel_genel - toplam_maliyet_genel
+                        toplam_kar_yuzde = (toplam_kar_genel / toplam_maliyet_genel) * 100 if toplam_maliyet_genel > 0 else 0
                         st.metric("Toplam Yatırım Maliyeti", f"{toplam_maliyet_genel:,.2f}")
                         st.metric("Toplam Güncel Bakiye", f"{toplam_guncel_genel:,.2f}")
-                        st.metric("Total Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f}")
+                        st.metric("Total Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f} ({toplam_kar_yuzde:+.2f}%)")
+                        st.markdown("---")
+                        
+                        # EKSİK OLAN TEMETTÜ EKRANI GERİ GELDİ!
+                        st.markdown("### 💸 Temettü Simülatörü")
+                        st.success(f"Tahmini Yıllık Pasif Gelir: **{toplam_temettu:,.2f}**")
+
                     with pie_col:
                         fig_pie = go.Figure(data=[go.Pie(labels=pasta_etiketler, values=pasta_degerler, hole=.4, textinfo='label+percent')])
                         fig_pie.update_layout(title_text="💼 Varlık Dağılımı", template="plotly_dark", height=350, margin=dict(t=40, b=10, l=10, r=10))
                         st.plotly_chart(fig_pie, use_container_width=True)
                     
                     st.markdown("---")
+                    
+                    # EKSİK OLAN VADER AI PORTFÖY RÖNTGENİ GERİ GELDİ!
+                    st.subheader("🧠 Vader Portföy Röntgeni")
+                    if is_premium:
+                        if len(pasta_etiketler) <= 2: st.warning("⚠️ **Risk Uyarısı:** Varlık sayınız çok az. Çeşitliliği artırmanı öneririm.")
+                        else: st.info(f"✅ **Dağılım Başarılı:** Sepetinizde {len(pasta_etiketler)} farklı varlık var.")
+                        en_buyuk_index = np.argmax(pasta_degerler)
+                        st.write(f"- En büyük ağırlık **%{ (pasta_degerler[en_buyuk_index] / sum(pasta_degerler)) * 100 :.1f}** ile **{pasta_etiketler[en_buyuk_index]}**.")
+                        if toplam_kar_genel > 0: st.write("- 🟢 Yatırım stratejiniz kârlı ilerliyor.")
+                        else: st.write("- 🔴 Genel portföy şu an zararda. Maliyet düşürmek değerlendirilebilir.")
+                    else:
+                        st.error("🔒 Yapay Zeka Portföy Röntgeni sadece Premium Abonelere özeldir.")
+
+                    st.markdown("---")
+                    st.markdown("### 📋 Varlık Detayları")
                     for v in gecerli_veriler:
                         c1, c2, c3, c4, c5 = st.columns([1.5, 1.5, 1.5, 2.5, 1])
                         c1.write(f"**{v['hisse_kod']}**")
                         c2.write(f"Maliyet: {v['maliyet']:,.2f}")
                         c3.write(f"Lot: {v['lot']}")
-                        c4.metric("Güncel & Kar", f"{v['guncel_deger']:,.2f}", f"{v['kar']:+,.2f}")
+                        c4.metric("Güncel & Kar", f"{v['guncel_deger']:,.2f}", f"{v['kar']:+,.2f} ({v['kar_yuzde']:+.2f}%)")
                         if c5.button("Sil", key=f"del_port_{v['id']}"):
                             supabase.table("portfoyler").delete().eq("id", v['id']).execute()
                             st.rerun()
