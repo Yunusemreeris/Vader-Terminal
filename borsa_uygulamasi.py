@@ -17,13 +17,15 @@ import streamlit.components.v1 as components
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Akıllı Gizleme Kalkanı (Menü açma tuşunu bozmaz, sadece sağ üstü temizler)
+# Agresif Gizleme Kalkanı
 gizleme_kodu = """
             <style>
             #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
-            header [data-testid="stToolbar"] {display: none !important;}
+            [data-testid="stToolbar"] {display: none !important;}
+            [data-testid="stDecoration"] {display: none !important;}
             .stDeployButton {display: none !important;}
+            header .st-emotion-cache-1cvow4s {display: none !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
@@ -116,6 +118,7 @@ def piyasa_alarmlari():
         except: pass
     return alarmlar if alarmlar else ["Piyasa şu an sakin, olağanüstü bir hareket yok."]
 
+# YENİ CANAVAR HABER MOTORU (Sadece son 24 saat)
 @st.cache_data(ttl=30) 
 def son_dakika_haberleri(sembol):
     haberler = []
@@ -477,6 +480,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     if st.button("💎 Premium Satın Al"): st.info("İletişim: yunusemreeris787@gmail.com")
 
             with t5:
+                # YENİ CANLI HABER ARAYÜZÜ
                 c_hab1, c_hab2 = st.columns([3, 1])
                 c_hab1.subheader("📡 Canlı Haber Radarı")
                 
