@@ -17,16 +17,21 @@ import streamlit.components.v1 as components
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Cerrahi Gizleme Kalkanı (Sol menü okuna %100 dokunmaz)
+# Nihai Bulut Kalkanı (Sol menü güvende, sağ üst ve sağ alt yok edilir!)
 gizleme_kodu = """
             <style>
-            #MainMenu {visibility: hidden !important;}
-            footer {visibility: hidden !important;}
-            .stDeployButton {display: none !important;}
+            /* Sağ üstteki Share, Yıldız ve Github ikonlarını barındıran kutuyu yok eder */
             [data-testid="stHeaderActionElements"] {display: none !important;}
+            /* 3 Nokta menüsünü gizler */
+            [data-testid="stToolbar"] {display: none !important;}
+            /* Sağ alttaki sinsi 'Manage app' butonunu uçurur */
+            [data-testid="manage-app-button"] {display: none !important;}
+            /* En alttaki Streamlit filigranını yok eder */
+            footer {visibility: hidden !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
 # --- 2. SUPABASE BAĞLANTISI ---
 @st.cache_resource
 def supabase_baglan():
