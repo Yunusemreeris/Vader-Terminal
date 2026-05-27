@@ -487,9 +487,10 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- SAYFA: İZLEME LİSTEM ---
+# --- SAYFA: İZLEME LİSTEM (HATA DÜZELTMESİ EKLENDİ!) ---
 elif sayfa == "⭐ İzleme Listem":
     st.title("Kişisel İzleme Listeniz")
+    st.markdown("Favoriye aldığınız tüm varlıkları tek ekranda takip edin.")
     if st.session_state.kullanici:
         try:
             liste = supabase.table("izleme_listesi").select("sembol").eq("user_id", st.session_state.user_id).execute()
@@ -497,6 +498,7 @@ elif sayfa == "⭐ İzleme Listem":
                 for kalem in liste.data:
                     s = kalem['sembol']
                     d = yf.Ticker(s).history(period="2d")
+                    
                     if not d.empty and len(d) >= 2:
                         son, eski = d['Close'].iloc[-1], d['Close'].iloc[-2]
                         yuzde = ((son - eski) / eski) * 100
@@ -513,7 +515,13 @@ elif sayfa == "⭐ İzleme Listem":
                             if st.button("❌", key=f"delfav_{s}"):
                                 supabase.table("izleme_listesi").delete().eq("user_id", st.session_state.user_id).eq("sembol", s).execute()
                                 st.rerun()
-                        st.markdown("---")
+                    else:
+                        c1, c2 = st.columns([3, 1])
+                        c1.warning(f"⚠️ **{s}** sembolü için veri alınamıyor (Borsa kapalı veya kod hatalı).")
+                        if c2.button("❌ Hatalı Kodu Sil", key=f"delfav_hata_{s}"):
+                            supabase.table("izleme_listesi").delete().eq("user_id", st.session_state.user_id).eq("sembol", s).execute()
+                            st.rerun()
+                    st.markdown("---")
             else: st.info("İzleme listeniz boş. Canlı Analiz kısmından yıldızla ekleyin.")
         except Exception as e: st.error(f"Bağlantı hatası: {e}")
     else: st.warning("Bu özelliği kullanmak için giriş yapmalısınız.")
@@ -533,7 +541,6 @@ elif sayfa == "⚔️ Rakip Analizi":
                 getiri1 = ((df1['Close'].iloc[-1] - df1['Close'].iloc[0]) / df1['Close'].iloc[0]) * 100
                 getiri2 = ((df2['Close'].iloc[-1] - df2['Close'].iloc[0]) / df2['Close'].iloc[0]) * 100
                 
-                # EKSİK OLAN RSI HESAPLAYICISI GERİ GELDİ!
                 def calc_rsi(d):
                     delta = d['Close'].diff()
                     rs = (delta.where(delta > 0, 0)).rolling(14).mean() / (-delta.where(delta < 0, 0)).rolling(14).mean()
@@ -582,7 +589,6 @@ elif sayfa == "📡 Piyasa Radarı & Isı Haritası":
                 fig_hm.update_layout(template="plotly_dark", height=600, margin=dict(t=10, l=10, r=10, b=10))
                 st.plotly_chart(fig_hm, use_container_width=True)
                 
-                # EKSİK OLAN RADAR TABLOSU GERİ GELDİ!
                 st.dataframe(df_hm.sort_values(by="Degisim", ascending=False), use_container_width=True)
             else: st.error("Veri çekilemedi.")
     footer_ekle()
@@ -618,7 +624,6 @@ elif sayfa == "💼 Portföyüm":
                         h = yf.Ticker(row['hisse_kod'])
                         anlik_fiyat = h.history(period="5d")['Close'].iloc[-1]
                         
-                        # EKSİK OLAN TEMETTÜ HESAPLAYICI GERİ GELDİ!
                         try:
                             div_yield = h.info.get('dividendYield', 0)
                             if div_yield: toplam_temettu += (anlik_fiyat * div_yield) * row['lot']
@@ -648,7 +653,6 @@ elif sayfa == "💼 Portföyüm":
                         st.metric("Total Net Kâr / Zarar", f"{toplam_kar_genel:+,.2f} ({toplam_kar_yuzde:+.2f}%)")
                         st.markdown("---")
                         
-                        # EKSİK OLAN TEMETTÜ EKRANI GERİ GELDİ!
                         st.markdown("### 💸 Temettü Simülatörü")
                         st.success(f"Tahmini Yıllık Pasif Gelir: **{toplam_temettu:,.2f}**")
 
@@ -659,7 +663,6 @@ elif sayfa == "💼 Portföyüm":
                     
                     st.markdown("---")
                     
-                    # EKSİK OLAN VADER AI PORTFÖY RÖNTGENİ GERİ GELDİ!
                     st.subheader("🧠 Vader Portföy Röntgeni")
                     if is_premium:
                         if len(pasta_etiketler) <= 2: st.warning("⚠️ **Risk Uyarısı:** Varlık sayınız çok az. Çeşitliliği artırmanı öneririm.")
