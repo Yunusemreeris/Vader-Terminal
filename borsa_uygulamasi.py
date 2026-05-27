@@ -27,7 +27,7 @@ gizleme_kodu = """
             .stDeployButton {display: none !important;}
             </style>
             """
-st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
 # --- 2. SUPABASE BAĞLANTISI ---
 @st.cache_resource
 def supabase_baglan():
