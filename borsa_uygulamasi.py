@@ -39,6 +39,7 @@ gizleme_kodu = """
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
 # --- 2. SUPABASE BAĞLANTISI ---
 @st.cache_resource
 def supabase_baglan():
