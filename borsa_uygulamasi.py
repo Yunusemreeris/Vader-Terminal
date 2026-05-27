@@ -17,17 +17,25 @@ import streamlit.components.v1 as components
 # --- 1. SİTE KONFİGÜRASYONU VE GÜVENLİK KALKANI ---
 st.set_page_config(page_title="Vader Analiz Terminali", layout="wide", initial_sidebar_state="expanded")
 
-# Nihai Bulut Kalkanı (Sol menü güvende, sağ üst ve sağ alt yok edilir!)
+# --- Lazer Kalkanı (Sol Menü Garantili) ---
 gizleme_kodu = """
             <style>
-            /* Sağ üstteki Share, Yıldız ve Github ikonlarını barındıran kutuyu yok eder */
-            [data-testid="stHeaderActionElements"] {display: none !important;}
-            /* 3 Nokta menüsünü gizler */
-            [data-testid="stToolbar"] {display: none !important;}
-            /* Sağ alttaki sinsi 'Manage app' butonunu uçurur */
-            [data-testid="manage-app-button"] {display: none !important;}
-            /* En alttaki Streamlit filigranını yok eder */
+            /* 1. Klasik Streamlit menüsünü ve alt yazıyı gizle */
+            #MainMenu {visibility: hidden !important;}
             footer {visibility: hidden !important;}
+            
+            /* 2. Sağ alttaki 'Manage App' yazısını linkinden vurarak yok et */
+            a[href*="manage"] {display: none !important;}
+            a[href*="share.streamlit.io/user/"] {display: none !important;}
+            
+            /* 3. Sağ üstteki Bulut Logolarını (Github, Share, Star) yok et */
+            [class^="viewerBadge_"] {display: none !important;}
+            
+            /* 4. Sağ üstteki klasik araç çubuğunu gizle */
+            [data-testid="stToolbar"] {display: none !important;}
+            
+            /* 5. GÜVENLİK SİGORTASI: Ne olursa olsun Sol Menü Okunu zorla göster! */
+            [data-testid="collapsedControl"] {display: flex !important; visibility: visible !important;}
             </style>
             """
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
