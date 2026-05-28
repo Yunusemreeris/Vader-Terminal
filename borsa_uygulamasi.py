@@ -236,6 +236,7 @@ sayfa = st.sidebar.radio("SİTE MENÜSÜ", [
     "🏠 Ana Sayfa & Giriş", 
     "📈 Canlı Analiz Terminali", 
     "📰 Piyasa Haberleri",
+    "⏳ Zaman Makinesi (DCA)", 
     "⭐ İzleme Listem",
     "⚔️ Rakip Analizi",
     "📡 Piyasa Radarı & Yeni Nesil Eklentiler",
@@ -299,10 +300,10 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
         st.info("İzleme Listeniz ve Portföyünüz bulutla senkronize edildi.")
 
     st.markdown("### 📢 Duyurular")
-    st.warning("Temel analiz araçları tamamen ücretsizdir. Yapay zeka ve Monte Carlo özellikleri Premium Abonelik gerektirir.")
+    st.warning("Temel analiz araçları tamamen ücretsizdir. Yapay zeka, Monte Carlo ve Portföy Korelasyon özellikleri Premium Abonelik gerektirir.")
     footer_ekle()
 
-# --- SAYFA: CANLI ANALİZ ---
+# --- SAYFA: CANLI ANALİZ VE GELİŞMİŞ MONTE CARLO ---
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Sembol (Örn: THYAO.IS, BTC-USD, AAPL):", "THYAO.IS").upper()
     sembol = hisse_kod
@@ -387,7 +388,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("Haftalık Getiri", f"%{haftalik_getiri:.2f}", "Teknik Veri")
             m4.metric("Üyelik Seviyesi", "💎 Premium" if is_premium else "👤 Ücretsiz")
 
-            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon 💎", "📰 Haberler", "📑 Finansallar", "💬 Vader AI 💎"])
+            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon v2.0 💎", "📰 Haberler", "📑 Finansallar", "💬 Vader AI 💎"])
             
             with t1:
                 goster_bollinger = st.checkbox("Bollinger Bantlarını Göster")
@@ -448,29 +449,58 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 c2.metric("Peryodun En Düşük", f"{para_birimi}{dip_52:.2f}", f"Dipten Uzaklık: %{dibe_uzaklik:+.2f}")
                 c3.metric("Anlık Volatilite", f"{para_birimi}{df['Close'].tail(20).std():.2f}")
 
+            # --- GELİŞMİŞ MONTE CARLO v2.0 ---
             with t4: 
-                st.subheader("🔮 Yapay Zeka Gelecek Simülasyonu (Pro Monte Carlo)")
+                st.subheader("🔮 Gelişmiş Pro Monte Carlo Simülasyonu (Kurumsal Seviye)")
                 if is_premium:
-                    log_returns = np.log(1 + df['Close'].pct_change()).dropna()
-                    u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
-                    son_20_getiri = (df['Close'].iloc[-1] / df['Close'].iloc[-20]) - 1 if len(df) >= 20 else 0
-                    drift = (u - (0.5 * var)) * 0.4 + ((son_20_getiri / 20) * 0.6)
-                    gun = 30
-                    sims = np.zeros((gun, 100))
-                    sims[0] = fiyat
-                    np.random.seed(int(fiyat * 100))
-                    for t in range(1, gun): sims[t] = sims[t - 1] * np.exp(drift + stdev * np.random.standard_normal(100))
-                    np.random.seed()
-                    med, iyi, kotu = np.percentile(sims, 50, axis=1), np.percentile(sims, 95, axis=1), np.percentile(sims, 5, axis=1)
-                    tarihler = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=gun)
-                    fig_mc = go.Figure()
-                    fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Geçmiş'))
-                    fig_mc.add_trace(go.Scatter(x=tarihler, y=iyi, line=dict(color='rgba(0, 255, 0, 0.4)', dash='dot'), name='İyimser'))
-                    fig_mc.add_trace(go.Scatter(x=tarihler, y=kotu, fill='tonexty', fillcolor='rgba(128,128,128,0.1)', line=dict(color='rgba(255, 0, 0, 0.4)', dash='dot'), name='Kötümser'))
-                    fig_mc.add_trace(go.Scatter(x=tarihler, y=med, line=dict(color='#00FFCC', width=3), name='Medyan Rota'))
-                    fig_mc.update_layout(template=tema, height=450, hovermode="x unified")
-                    st.plotly_chart(fig_mc, use_container_width=True)
-                else: st.error("🔒 Bu özellik sadece Premium Abonelere özeldir.")
+                    st.markdown("Geometrik Brownian Hareketi (GBM) ile binlerce farklı paralel evren yaratarak gelecekteki olası fiyat dağılımını hesaplar.")
+                    c_m1, c_m2 = st.columns(2)
+                    mc_gun = c_m1.slider("Simülasyon Süresi (Gün):", min_value=10, max_value=365, value=30, step=10)
+                    mc_senaryo = c_m2.selectbox("Senaryo (Paralel Evren) Sayısı:", [100, 500, 1000, 5000], index=2)
+                    
+                    if st.button("🚀 Monte Carlo'yu Çalıştır"):
+                        with st.spinner(f"Vader {mc_senaryo} farklı senaryo hesaplıyor..."):
+                            log_returns = np.log(1 + df['Close'].pct_change()).dropna()
+                            u, var, stdev = log_returns.mean(), log_returns.var(), log_returns.std()
+                            drift = u - (0.5 * var)
+                            
+                            sims = np.zeros((mc_gun, mc_senaryo))
+                            sims[0] = fiyat
+                            np.random.seed(42) # Sabit sonuçlar için, istenirse kaldırılabilir
+                            
+                            for t in range(1, mc_gun): 
+                                sims[t] = sims[t - 1] * np.exp(drift + stdev * np.random.standard_normal(mc_senaryo))
+                            
+                            med = np.percentile(sims, 50, axis=1)
+                            iyi = np.percentile(sims, 95, axis=1)
+                            kotu = np.percentile(sims, 5, axis=1)
+                            tarihler = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=mc_gun)
+                            
+                            fig_mc = go.Figure()
+                            # Sadece 20 rastgele senaryoyu ince arka plan çizgisi olarak çiz (Tarayıcı çökmesin diye)
+                            for i in range(min(20, mc_senaryo)):
+                                fig_mc.add_trace(go.Scatter(x=tarihler, y=sims[:, i], line=dict(color='rgba(255,255,255,0.05)', width=1), showlegend=False))
+                                
+                            fig_mc.add_trace(go.Scatter(x=df.index[-60:], y=df['Close'].iloc[-60:], line=dict(color='gray', width=2), name='Gerçek Geçmiş'))
+                            fig_mc.add_trace(go.Scatter(x=tarihler, y=iyi, line=dict(color='rgba(0, 255, 0, 0.6)', dash='dot', width=2), name='%95 İyimser Zirve'))
+                            fig_mc.add_trace(go.Scatter(x=tarihler, y=kotu, fill='tonexty', fillcolor='rgba(128,128,128,0.1)', line=dict(color='rgba(255, 0, 0, 0.6)', dash='dot', width=2), name='%5 Kötümser Dip (VaR)'))
+                            fig_mc.add_trace(go.Scatter(x=tarihler, y=med, line=dict(color='#00FFCC', width=3), name='Beklenen Medyan Rota'))
+                            fig_mc.update_layout(template=tema, height=450, hovermode="x unified", title=f"{mc_gun} Günlük Gelecek Projeksiyonu")
+                            st.plotly_chart(fig_mc, use_container_width=True)
+                            
+                            # İstatistiksel Sonuçlar ve VaR (Value at Risk)
+                            son_gun_fiyatlari = sims[-1, :]
+                            beklenen_fiyat = np.median(son_gun_fiyatlari)
+                            var_95 = np.percentile(son_gun_fiyatlari, 5) # %5 en kötü ihtimal
+                            maks_potansiyel = np.max(son_gun_fiyatlari)
+                            
+                            st.markdown("### 📊 Simülasyon İstatistikleri")
+                            col_s1, col_s2, col_s3 = st.columns(3)
+                            col_s1.metric(f"{mc_gun} Gün Sonrası Beklenen (Medyan)", f"{para_birimi}{beklenen_fiyat:,.2f}", f"{(beklenen_fiyat-fiyat)/fiyat*100:+.2f}%")
+                            col_s2.metric("Maksimum Görülen Zirve", f"{para_birimi}{maks_potansiyel:,.2f}", "Uç Senaryo")
+                            col_s3.metric("Riske Maruz Değer (VaR %5)", f"{para_birimi}{var_95:,.2f}", "Kötü Senaryo Dibi", delta_color="inverse")
+                            st.info(f"💡 **Fon Yöneticisi Özeti:** {mc_gun} gün sonra paranızın {para_birimi}{var_95:,.2f} seviyesinin altına düşme ihtimali sadece %5'tir. En olası hedef fiyat ise {para_birimi}{beklenen_fiyat:,.2f} olarak hesaplanmıştır.")
+                else: st.error("🔒 Kurumsal Seviye Monte Carlo özelliği sadece Premium Abonelere özeldir.")
 
             with t5:
                 c_hab1, c_hab2 = st.columns([3, 1])
@@ -514,12 +544,63 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
+# --- YENİ SAYFA: ZAMAN MAKİNESİ (DCA SİMÜLATÖRÜ) ---
+elif sayfa == "⏳ Zaman Makinesi (DCA)":
+    st.title("⏳ Zaman Makinesi (DCA Simülatörü)")
+    st.markdown("Geçmişte yatırım yapsaydınız bugün neyiniz olurdu? Düzenli alım (Dolar/Maliyet Ortalaması) gücünü test edin.")
+    
+    col1, col2, col3 = st.columns(3)
+    dca_sembol = col1.text_input("Hisse Sembolü (Örn: THYAO.IS, BTC-USD):", "THYAO.IS").upper()
+    dca_aylik_miktar = col2.number_input("Aylık Yatırım Miktarı:", min_value=100.0, value=1000.0, step=100.0)
+    dca_yil = col3.selectbox("Kaç Yıl Önce Başladınız?", [1, 2, 3, 5, 10], index=2)
+    
+    if st.button("⏳ Simülasyonu Başlat"):
+        with st.spinner("Zaman makinesi geçmişe gidiyor..."):
+            try:
+                # Geçmiş veriyi çek
+                df_dca = yf.Ticker(dca_sembol).history(period=f"{dca_yil}y")
+                if not df_dca.empty and len(df_dca) > 20:
+                    # Aylık ilk işlem günlerini bul
+                    df_aylik = df_dca.resample('MS').first().dropna()
+                    
+                    df_aylik['Yatirilan_Miktar'] = dca_aylik_miktar
+                    df_aylik['Alinan_Lot'] = df_aylik['Yatirilan_Miktar'] / df_aylik['Close']
+                    df_aylik['Kumbara_Lot'] = df_aylik['Alinan_Lot'].cumsum()
+                    df_aylik['Toplam_Maliyet'] = df_aylik['Yatirilan_Miktar'].cumsum()
+                    df_aylik['Guncel_Portfoy_Degeri'] = df_aylik['Kumbara_Lot'] * df_aylik['Close']
+                    
+                    toplam_yatirilan = df_aylik['Toplam_Maliyet'].iloc[-1]
+                    son_deger = df_aylik['Guncel_Portfoy_Degeri'].iloc[-1]
+                    net_kar = son_deger - toplam_yatirilan
+                    kar_orani = (net_kar / toplam_yatirilan) * 100
+                    
+                    st.markdown("### 📈 Simülasyon Sonuçları")
+                    c_s1, c_s2, c_s3 = st.columns(3)
+                    para_b = "₺" if ".IS" in dca_sembol else "$"
+                    c_s1.metric("Cebinizden Çıkan Toplam Para", f"{para_b}{toplam_yatirilan:,.2f}")
+                    c_s2.metric("Portföyün Bugünkü Değeri", f"{para_b}{son_deger:,.2f}", f"%{kar_orani:,.2f} Getiri")
+                    c_s3.metric("Net Kâr", f"{para_b}{net_kar:,.2f}")
+                    
+                    # Grafiği Çiz
+                    fig_dca = go.Figure()
+                    fig_dca.add_trace(go.Scatter(x=df_aylik.index, y=df_aylik['Toplam_Maliyet'], line=dict(color='gray', width=2, dash='dash'), name='Toplam Yatırılan Para'))
+                    fig_dca.add_trace(go.Scatter(x=df_aylik.index, y=df_aylik['Guncel_Portfoy_Degeri'], line=dict(color='#00FFCC', width=3), fill='tozeroy', fillcolor='rgba(0, 255, 204, 0.1)', name='Portföy Değeri'))
+                    fig_dca.update_layout(template="plotly_dark", height=450, hovermode="x unified", title=f"{dca_yil} Yıllık Düzenli Alım Büyümesi")
+                    st.plotly_chart(fig_dca, use_container_width=True)
+                    
+                    st.info("💡 **DCA (Dollar Cost Averaging) Mantığı:** Düşüşlerde daha fazla lot alarak maliyetinizi düşürdünüz. Borsa düşse bile düzenli alım uzun vadede kazanır.")
+                else:
+                    st.error("Bu sembol için yeterli geçmiş veri bulunamadı.")
+            except Exception as e:
+                st.error(f"Simülasyon hatası: {e}")
+    footer_ekle()
+
 # --- SAYFA: PİYASA HABERLERİ & DİNAMİK SESLİ BRİFİNG ---
 elif sayfa == "📰 Piyasa Haberleri":
     st.title("📰 Piyasa Haber Merkezi & AI Brifing")
     st.markdown("Global piyasaların nabzını ve yapay zeka destekli güncel sesli özetleri takip edin.")
     
-    tab_genel, tab_izleme, tab_podcast = st.tabs(["🌍 Genel Piyasa Gündemi", "⭐ İzleme Listem Haberleri", "🎧 Vader Sesli Brifing (YENİ)"])
+    tab_genel, tab_izleme, tab_podcast = st.tabs(["🌍 Genel Piyasa Gündemi", "⭐ İzleme Listem Haberleri", "🎧 Vader Sesli Brifing"])
     
     with tab_genel:
         c1, c2 = st.columns([4, 1])
@@ -562,11 +643,11 @@ elif sayfa == "📰 Piyasa Haberleri":
                             st.info(f"{s} için son 24 saatte yeni haber düşmedi.")
                         st.markdown("---")
                 else:
-                    st.warning("İzleme listeniz boş. Canlı Analiz ekranından yıldızlayarak hisse eklerseniz, onlara ait haberler buraya düşecektir.")
+                    st.warning("İzleme listeniz boş.")
             except Exception as e:
                 st.error("Veritabanına bağlanılırken bir hata oluştu.")
         else:
-            st.error("İzleme listenizdeki varlıkların özel haberlerini görebilmek için üye girişi yapmalısınız.")
+            st.error("Giriş yapmalısınız.")
             
     with tab_podcast:
         st.subheader("🎧 Vader Günlük Sesli Piyasa Özeti")
@@ -578,15 +659,12 @@ elif sayfa == "📰 Piyasa Haberleri":
             else:
                 with st.spinner("Vader piyasayı tarayıp stüdyoya giriyor... (Veri çekimi 10-15 saniye sürebilir)"):
                     try:
-                        # 1. Haberleri Çek ve Temizle
                         g_haberler = genel_piyasa_haberleri()
                         haber_metni = "Bugün için önemli bir haber akışı bulunmuyor."
                         if g_haberler:
-                            # Sadece ilk 4 haberi al ve gazete isimlerini (" - Habertürk" vb.) kırp
                             basliklar = [h.get('title', '').split(' - ')[0] for h in g_haberler[:4]]
                             haber_metni = "Günün öne çıkan önemli gelişmeleri şöyle. " + ". ".join(basliklar) + "."
                             
-                        # 2. BİST Hisselerini Tara (Hızlı tarama için ana hisseler)
                         ana_hisseler = ["THYAO.IS", "SASA.IS", "EREGL.IS", "TUPRS.IS", "FROTO.IS", "AKBNK.IS", "ISCTR.IS", "YKBNK.IS", "KCHOL.IS", "SAHOL.IS", "ASELS.IS", "BIMAS.IS", "SISE.IS", "TOASO.IS", "PGSUS.IS", "ENKAI.IS", "GARAN.IS", "TCELL.IS", "KRDMD.IS", "PETKM.IS", "ASTOR.IS", "HEKTS.IS"]
                         degisimler = {}
                         
@@ -602,7 +680,6 @@ elif sayfa == "📰 Piyasa Haberleri":
                             
                         piyasa_metni = ""
                         if degisimler:
-                            # Sırala ve Top 5'leri al
                             sirali = sorted(degisimler.items(), key=lambda x: x[1], reverse=True)
                             en_cok_artanlar = sirali[:5]
                             en_cok_dusenler = sirali[-5:]
@@ -615,14 +692,11 @@ elif sayfa == "📰 Piyasa Haberleri":
                             for h, y in en_cok_dusenler:
                                 piyasa_metni += f"yüzde {abs(y):.1f} düşüşle {h}, "
                                 
-                        # 3. Nihai Metni Oluştur
                         metin = f"Vader analiz terminaline hoş geldiniz patron. {haber_metni} {piyasa_metni} Benim analizlerim şimdilik bu kadar. Lütfen risk yönetiminizi yapmayı unutmayın. Bol kazançlar dilerim."
                         
                         ses_dosyasi = "vader_brifing.mp3"
                         
-                        # Edge-TTS Asenkron Çalıştırma (Hızlandırılmış ve Profesyonel Ses)
                         async def ses_olustur():
-                            # AhmetNeural sesi, rate="+10%" ile biraz daha dinamik ve hızlı okunur
                             communicate = edge_tts.Communicate(metin, "tr-TR-AhmetNeural", rate="+10%")
                             await communicate.save(ses_dosyasi)
                         
@@ -715,11 +789,11 @@ elif sayfa == "⚔️ Rakip Analizi":
         except: st.error("Hata oluştu.")
     footer_ekle()
 
-# --- SAYFA: PİYASA RADARI & YENİ NESİL EKLENTİLER ---
+# --- SAYFA: PİYASA RADARI ---
 elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
     st.title("🗺️ Piyasa Radarı & Eklentiler")
     
-    tab_harita, tab_balina, tab_duygu = st.tabs(["🗺️ Isı Haritası", "🐳 Balina Radarı (YENİ)", "🌡️ Piyasa Duygu Ölçer (YENİ)"])
+    tab_harita, tab_balina, tab_duygu = st.tabs(["🗺️ Isı Haritası", "🐳 Balina Radarı", "🌡️ Piyasa Duygu Ölçer"])
     radar_listesi = ["THYAO.IS", "SASA.IS", "EREGL.IS", "TUPRS.IS", "FROTO.IS", "BTC-USD", "ETH-USD", "GC=F", "AAPL", "NVDA", "TSLA"]
     
     with tab_harita:
@@ -749,8 +823,7 @@ elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
 
     with tab_balina:
         st.subheader("🐳 Balina Radarı (Anormal Hacim Avcısı)")
-        st.markdown("Son 20 günlük ortalama işlem hacminin **1.5 katından fazla** işlem gören varlıkları tespit eder. Sessizce toplanan hisseleri patlamadan önce bulmak için harikadır.")
-        
+        st.markdown("Son 20 günlük ortalama işlem hacminin **1.5 katından fazla** işlem gören varlıkları tespit eder.")
         if st.button("🐳 Balinaları Tara"):
             with st.spinner("Derin denizler taranıyor, dev işlemler aranıyor..."):
                 balinalar = []
@@ -768,12 +841,11 @@ elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
                     st.success(f"{len(balinalar)} adet anormal hacim hareketi tespit edildi! Balinalar hareket halinde.")
                     st.table(pd.DataFrame(balinalar).set_index("Sembol"))
                 else:
-                    st.info("Şu an piyasada olağandışı bir balina hareketi (anormal hacim) tespit edilmedi.")
+                    st.info("Şu an piyasada olağandışı bir balina hareketi tespit edilmedi.")
 
     with tab_duygu:
         st.subheader("🌡️ Piyasa Duygu Ölçer (Korku ve Açgözlülük)")
-        st.markdown("Ana piyasa yapıcı varlıkların momentumu analiz edilerek **Korku** ve **Açgözlülük** endeksi hesaplanır. Piyasada mantık değil, psikoloji satar.")
-        
+        st.markdown("Ana piyasa yapıcı varlıkların momentumu analiz edilerek **Korku** ve **Açgözlülük** endeksi hesaplanır.")
         if st.button("🌡️ Psikolojiyi Ölç"):
             with st.spinner("Yatırımcı psikolojisi analiz ediliyor..."):
                 rsi_degerleri = []
@@ -810,17 +882,16 @@ elif sayfa == "📡 Piyasa Radarı & Yeni Nesil Eklentiler":
                     st.plotly_chart(fig_gauge, use_container_width=True)
                     
                     if avg_rsi < 40: 
-                        st.error("🚨 **Piyasa Durumu: AŞIRI KORKU**\nKanlı sokaklar... Büyük paranın dipten toplama alanı. Warren Buffett der ki: 'Başkaları korkarken açgözlü olun.'")
+                        st.error("🚨 **Piyasa Durumu: AŞIRI KORKU**\nKanlı sokaklar... Büyük paranın dipten toplama alanı.")
                     elif avg_rsi > 60: 
-                        st.success("🤑 **Piyasa Durumu: AŞIRI AÇGÖZLÜLÜK**\nZirve coşkusu hakim. Herkes alım yapıyor, bu genellikle bir kâr satışı düzeltmesinin (şelalenin) yaklaştığını gösterir.")
+                        st.success("🤑 **Piyasa Durumu: AŞIRI AÇGÖZLÜLÜK**\nZirve coşkusu hakim. Herkes alım yapıyor.")
                     else: 
-                        st.warning("⚖️ **Piyasa Durumu: NÖTR**\nYatırımcılar yön arayışında. Kararsız ve yatay bir bekleyiş var.")
+                        st.warning("⚖️ **Piyasa Durumu: NÖTR**\nYatırımcılar yön arayışında.")
                 else:
                     st.error("Duygu ölçer için yeterli veri alınamadı.")
-
     footer_ekle()
 
-# --- SAYFA: PORTFÖYÜM ---
+# --- SAYFA: PORTFÖYÜM & KORELASYON MATRİSİ ---
 elif sayfa == "💼 Portföyüm":
     st.title("💼 Şahsi Bulut Portföyünüz")
     if st.session_state.kullanici is None: st.warning("Bu sayfayı görüntülemek için giriş yapmalısınız.")
@@ -890,16 +961,44 @@ elif sayfa == "💼 Portföyüm":
                     
                     st.markdown("---")
                     
-                    st.subheader("🧠 Vader Portföy Röntgeni")
+                    # --- PORTFÖY RİSK VE KORELASYON MATRİSİ ---
+                    st.subheader("🕸️ Portföy Risk ve Korelasyon Matrisi")
+                    benzersiz_hisseler = list(set(pasta_etiketler))
                     if is_premium:
-                        if len(pasta_etiketler) <= 2: st.warning("⚠️ **Risk Uyarısı:** Varlık sayınız çok az. Çeşitliliği artırmanı öneririm.")
-                        else: st.info(f"✅ **Dağılım Başarılı:** Sepetinizde {len(pasta_etiketler)} farklı varlık var.")
-                        en_buyuk_index = np.argmax(pasta_degerler)
-                        st.write(f"- En büyük ağırlık **%{ (pasta_degerler[en_buyuk_index] / sum(pasta_degerler)) * 100 :.1f}** ile **{pasta_etiketler[en_buyuk_index]}**.")
-                        if toplam_kar_genel > 0: st.write("- 🟢 Yatırım stratejiniz kârlı ilerliyor.")
-                        else: st.write("- 🔴 Genel portföy şu an zararda. Maliyet düşürmek değerlendirilebilir.")
+                        if len(benzersiz_hisseler) > 1:
+                            st.markdown("Sepetinizdeki varlıkların birbiriyle uyumunu ölçer. Korelasyon **1'e yaklaştıkça** hisseler aynı anda hareket eder (Yüksek risk). **0 veya eksi** değerler, portföyünüzün krizlere karşı daha dirençli olduğunu gösterir (Çeşitlendirme).")
+                            with st.spinner("Korelasyon motoru çalışıyor..."):
+                                dfs = []
+                                valid_tickers = []
+                                for t in benzersiz_hisseler:
+                                    try:
+                                        d = yf.Ticker(t).history(period="1y")['Close']
+                                        if not d.empty:
+                                            d.name = t
+                                            dfs.append(d)
+                                            valid_tickers.append(t)
+                                    except: pass
+                                
+                                if len(dfs) > 1:
+                                    port_df = pd.concat(dfs, axis=1).pct_change().dropna()
+                                    corr_matrix = port_df.corr()
+                                    fig_corr = px.imshow(corr_matrix, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1)
+                                    fig_corr.update_layout(template="plotly_dark", height=400)
+                                    st.plotly_chart(fig_corr, use_container_width=True)
+                                    
+                                    yuksek_risk = False
+                                    for i in range(len(corr_matrix.columns)):
+                                        for j in range(i+1, len(corr_matrix.columns)):
+                                            if corr_matrix.iloc[i, j] > 0.8: yuksek_risk = True
+                                            
+                                    if yuksek_risk:
+                                        st.error("🚨 **Uyarı:** Portföyünüzdeki bazı hisseler birbiriyle çok yüksek korelasyona sahip (>0.80). Piyasada olası bir çöküşte hepsi aynı anda düşebilir. Farklı sektörler ekleyerek riskinizi dağıtmayı düşünebilirsiniz.")
+                                    else:
+                                        st.success("✅ **Harika:** Portföyünüz iyi çeşitlendirilmiş görünüyor. Risk dağılımınız sağlıklı.")
+                        else:
+                            st.warning("Korelasyon analizi yapabilmek için portföyünüzde en az 2 farklı varlık bulunmalıdır.")
                     else:
-                        st.error("🔒 Yapay Zeka Portföy Röntgeni sadece Premium Abonelere özeldir.")
+                        st.error("🔒 Yapay Zeka Korelasyon Matrisi sadece Premium Abonelere özeldir.")
 
                     st.markdown("---")
                     st.markdown("### 📋 Varlık Detayları")
