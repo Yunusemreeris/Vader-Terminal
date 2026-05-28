@@ -1117,4 +1117,19 @@ elif sayfa == "💼 Portföyüm":
                             st.rerun()
                         st.markdown("---")
             else: st.info("Portföy boş.")
-        except Exception as e: st.error(f"Hata: {
+        except Exception as e: st.error(f"Hata: {e}")
+    footer_ekle()
+
+# --- SAYFA: HESABIM & HAKKIMDA ---
+elif sayfa == "👤 Hesabım":
+    st.title("Profil ve Üyelik Yönetimi")
+    if st.session_state.kullanici:
+        st.markdown(f"**E-posta Adresi:** {st.session_state.kullanici}")
+        st.markdown(f"**Mevcut Paket:** {'💎 Premium' if is_premium else '👤 Ücretsiz'}")
+    else: st.warning("Giriş yapmalısınız.")
+    footer_ekle()
+
+elif sayfa == "📩 Hakkımda & İletişim":
+    st.title("👨‍💻 Geliştirici Hakkında")
+    st.markdown("**Vader Analiz Terminali**, Bursa Uludağ Üniversitesi İİBF öğrencisi **Yunus Emre Eriş** tarafından geliştirilmiştir.\n\nİletişim: yunusemreeris787@gmail.com")
+    footer_ekle()
