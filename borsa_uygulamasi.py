@@ -90,21 +90,37 @@ def rakam_formatla(deger):
 
 def gelismis_temel_analiz_skoru(info):
     skorlar = {'Değerleme': 5, 'Kârlılık': 5, 'Büyüme': 5, 'Sağlık': 5, 'Temettü': 5}
+    aciklamalar = {}
     
+    # 1. DEĞERLEME HESABI VE AÇIKLAMASI
     fk = info.get('trailingPE')
     pddd = info.get('priceToBook')
     fk_puan, pddd_puan = 5, 5
     if fk: fk_puan = 10 if 0 < fk < 10 else (8 if 10 <= fk <= 15 else (5 if 15 < fk <= 25 else (0 if fk <= 0 else 2))) 
     if pddd: pddd_puan = 10 if 0 < pddd < 1.5 else (8 if 1.5 <= pddd <= 3 else (5 if 3 < pddd <= 6 else (0 if pddd <= 0 else 2)))
     skorlar['Değerleme'] = (fk_puan + pddd_puan) / 2
+    
+    if fk and pddd:
+        if skorlar['Değerleme'] >= 8: aciklamalar['Değerleme'] = f"Harika! Çarpanlar (F/K: {fk:.1f}, PD/DD: {pddd:.1f}) şirketin sektörüne göre oldukça ucuz (kelepir) fiyatlandığını gösteriyor."
+        elif skorlar['Değerleme'] >= 5: aciklamalar['Değerleme'] = f"Makul. Çarpanlar (F/K: {fk:.1f}, PD/DD: {pddd:.1f}) şirketin adil değerinde, normal seviyelerde olduğunu gösterir."
+        else: aciklamalar['Değerleme'] = f"Riskli! Fiyat kazanç oranı çok yüksek ({fk:.1f}). Şirket aşırı primlenmiş veya kâr üretemiyor olabilir."
+    else: aciklamalar['Değerleme'] = "Yeterli çarpan verisi bulunamadı."
 
+    # 2. KÂRLILIK HESABI VE AÇIKLAMASI
     roe = info.get('returnOnEquity')
     marj = info.get('profitMargins')
     roe_puan, marj_puan = 5, 5
     if roe: roe_puan = 10 if roe > 0.20 else (8 if roe > 0.10 else (4 if roe > 0 else 0))
     if marj: marj_puan = 10 if marj > 0.15 else (8 if marj > 0.05 else (4 if marj > 0 else 0))
     skorlar['Kârlılık'] = (roe_puan + marj_puan) / 2
+    
+    if roe and marj:
+        if skorlar['Kârlılık'] >= 8: aciklamalar['Kârlılık'] = f"Mükemmel. Şirket elindeki parayı çok iyi değerlendiriyor (Özkaynak Kârlılığı: %{roe*100:.1f}, Marj: %{marj*100:.1f})."
+        elif skorlar['Kârlılık'] >= 5: aciklamalar['Kârlılık'] = f"Orta Seviye. Şirketin kârlılık oranları (ROE: %{roe*100:.1f}) idare eder düzeyde."
+        else: aciklamalar['Kârlılık'] = f"Sıkıntılı! Şirket operasyonlarından kâr üretmekte çok zorlanıyor veya zarar yazıyor (ROE: %{roe*100:.1f})."
+    else: aciklamalar['Kârlılık'] = "Yeterli kârlılık verisi bulunamadı."
 
+    # 3. BÜYÜME HESABI VE AÇIKLAMASI
     cb = info.get('revenueGrowth')
     kb = info.get('earningsGrowth')
     cb_puan, kb_puan = 5, 5
@@ -112,6 +128,13 @@ def gelismis_temel_analiz_skoru(info):
     if kb: kb_puan = 10 if kb > 0.20 else (8 if kb > 0.05 else (4 if kb > -0.05 else 0))
     skorlar['Büyüme'] = (cb_puan + kb_puan) / 2
 
+    if cb and kb:
+        if skorlar['Büyüme'] >= 8: aciklamalar['Büyüme'] = f"Hızlı Büyüme! Ciro (%{cb*100:.1f}) ve Kâr (%{kb*100:.1f}) artışı muazzam. Şirket pazar payını genişletiyor."
+        elif skorlar['Büyüme'] >= 5: aciklamalar['Büyüme'] = f"Durağan. Ciro (%{cb*100:.1f}) veya kâr büyümesi yavaş/yatay seviyede."
+        else: aciklamalar['Büyüme'] = f"Küçülme! Şirketin cirosu veya kârı eriyor (Kâr Büyümesi: %{kb*100:.1f}). İşler yolunda gitmiyor."
+    else: aciklamalar['Büyüme'] = "Büyüme verileri tam olarak çekilemedi."
+
+    # 4. SAĞLIK HESABI VE AÇIKLAMASI
     co = info.get('currentRatio')
     bo = info.get('debtToEquity')
     co_puan, bo_puan = 5, 5
@@ -119,12 +142,23 @@ def gelismis_temel_analiz_skoru(info):
     if bo: bo_puan = 10 if bo < 50 else (7 if bo < 100 else 2) 
     skorlar['Sağlık'] = (co_puan + bo_puan) / 2
 
+    if co and bo:
+        if skorlar['Sağlık'] >= 8: aciklamalar['Sağlık'] = f"Çok Sağlam. Şirketin likiditesi yüksek (Cari Oran: {co:.1f}) ve borçluluk seviyesi çok güvenli."
+        elif skorlar['Sağlık'] >= 5: aciklamalar['Sağlık'] = f"Normal. Borç ve likidite oranları (Cari Oran: {co:.1f}) yönetilebilir düzeyde."
+        else: aciklamalar['Sağlık'] = f"Riskli! Şirketin likidite sorunu veya aşırı borç yükü var. Krizlere karşı dayanıksız."
+    else: aciklamalar['Sağlık'] = "Finansal sağlık verisi yetersiz."
+
+    # 5. TEMETTÜ HESABI VE AÇIKLAMASI
     div = info.get('dividendYield')
-    if div: skorlar['Temettü'] = 10 if div > 0.04 else (8 if div > 0.02 else (5 if div > 0 else 2))
-    else: skorlar['Temettü'] = 2 
+    if div: 
+        skorlar['Temettü'] = 10 if div > 0.04 else (8 if div > 0.02 else (5 if div > 0 else 2))
+        aciklamalar['Temettü'] = f"Nakit İneği. Şirket düzenli olarak net kârını yatırımcısıyla paylaşıyor (Verim: %{div*100:.1f})." if div > 0.02 else f"Şirket düşük de olsa temettü (kâr payı) ödüyor (Verim: %{div*100:.1f})."
+    else: 
+        skorlar['Temettü'] = 2 
+        aciklamalar['Temettü'] = "Şirket yatırımcısına temettü (kâr payı) dağıtma kültürüne sahip değil. Puan kırıldı."
 
     genel_skor = sum(skorlar.values()) / len(skorlar)
-    return skorlar, genel_skor
+    return skorlar, aciklamalar, genel_skor
 
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
@@ -341,7 +375,7 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
     st.warning("Temel analiz araçları tamamen ücretsizdir. Yapay zeka, Monte Carlo ve Şirket Skorlama özellikleri Premium Abonelik gerektirir.")
     footer_ekle()
 
-# --- SAYFA: CANLI ANALİZ VE GELİŞMİŞ MONTE CARLO VE ŞİRKET KARNESİ ---
+# --- SAYFA: CANLI ANALİZ VE YENİ ŞİRKET KARNESİ EKLENTİSİ ---
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Sembol (Örn: THYAO.IS, BTC-USD, AAPL):", "THYAO.IS").upper()
     sembol = hisse_kod
@@ -534,7 +568,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             col_s1.metric(f"{mc_gun} Gün Sonrası Beklenen (Medyan)", f"{para_birimi}{beklenen_fiyat:,.2f}", f"{(beklenen_fiyat-fiyat)/fiyat*100:+.2f}%")
                             col_s2.metric("Maksimum Görülen Zirve", f"{para_birimi}{maks_potansiyel:,.2f}", "Uç Senaryo")
                             col_s3.metric("Riske Maruz Değer (VaR %5)", f"{para_birimi}{var_95:,.2f}", "Kötü Senaryo Dibi", delta_color="inverse")
-                            st.info(f"💡 **Fon Yöneticisi Özeti:** {mc_gun} gün sonra paranızın {para_birimi}{var_95:,.2f} seviyesinin altına düşme ihtimali sadece %5'tir. En olası hedef fiyat ise {para_birimi}{beklenen_fiyat:,.2f} olarak hesaplanmıştır.")
                 else: st.error("🔒 Kurumsal Seviye Monte Carlo özelliği sadece Premium Abonelere özeldir.")
 
             with t5:
@@ -573,24 +606,26 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                     cevap += "- Kısa vadeli MACD sinyali AL veriyor.\n" if anlik_macd > anlik_signal else "- Kısa vadeli MACD sinyali SAT veriyor.\n"
                     st.info(cevap)
 
-            # --- YENİ EKLENTİ: ŞİRKET KARNESİ (SKORLAMA RADARI) ---
+            # --- YENİ EKLENTİ: ŞİRKET KARNESİ VE ŞEFFAF AÇIKLAMALAR ---
             with t8:
-                st.subheader("🕸️ Vader AI Şirket Karnesi")
+                st.subheader("🕸️ Vader AI Şirket Karnesi (Şeffaf Değerlendirme)")
                 if is_premium:
-                    st.markdown("Şirketin değerleme, kârlılık, büyüme, finansal sağlık ve temettü verilerini inceler. **Kusursuz şirket 10 üzerinden 10 alır.**")
+                    st.markdown("Vader, şirketin mali tablolarını derinlemesine inceler, not verir ve neden bu notu verdiğini şeffafça açıklar.")
                     with st.spinner("Bilanço taranıyor, mali tablolar analiz ediliyor..."):
-                        skor_dict, genel_skor = gelismis_temel_analiz_skoru(info)
+                        skor_dict, aciklama_dict, genel_skor = gelismis_temel_analiz_skoru(info)
                         
-                        col_k1, col_k2 = st.columns([1, 2])
+                        col_k1, col_k2 = st.columns([1.5, 1])
                         with col_k1:
-                            st.markdown(f"### Genel Skor: **{genel_skor}/10**")
+                            st.markdown(f"### Genel Skor: **{genel_skor:.1f}/10**")
                             if genel_skor >= 8: st.success("🟢 Güçlü Temel! Uzun vade için oldukça güvenli bir liman.")
-                            elif genel_skor >= 6: st.info("🟡 Kabul Edilebilir. Kendi sektörüne göre incelenmeli.")
-                            else: st.error("🔴 Zayıf Temel! Temel verilerde ciddi kırmızı bayraklar var.")
+                            elif genel_skor >= 6: st.info("🟡 Kabul Edilebilir. Ancak zayıf kalan özellikleri sektörüne göre incelenmeli.")
+                            else: st.error("🔴 Zayıf Temel! Temel verilerde ciddi kırmızı bayraklar var. Riskli.")
                             
                             st.markdown("---")
+                            st.markdown("#### Karar Gerekçeleri (Neden Bu Puan?)")
                             for metrik, puan in skor_dict.items():
-                                st.write(f"**{metrik}:** {puan}/10")
+                                renk_ikon = "🟢" if puan >= 8 else ("🟡" if puan >= 5 else "🔴")
+                                st.markdown(f"**{renk_ikon} {metrik} ({puan}/10):** <span style='color:lightgray'>{aciklama_dict[metrik]}</span>", unsafe_allow_html=True)
                                 
                         with col_k2:
                             fig_radar = go.Figure(data=go.Scatterpolar(
@@ -609,14 +644,14 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             )
                             st.plotly_chart(fig_radar, use_container_width=True)
                             
-                        st.info("💡 **Not:** Puanlamada negatif büyüme veya eksi (-F/K) durumları acımasızca **0** ile cezalandırılır. Grafiğin merkeze çöktüğü alanlar şirketin en zayıf karnıdır.")
+                        st.info("💡 **Vader'ın Disiplini:** Puanlamada negatif büyüme, net zarar veya eksi (-F/K) durumları acımasızca **0** ile cezalandırılır. Grafiğin merkeze çöktüğü alanlar şirketin en zayıf karnıdır.")
                 else: st.error("🔒 Yapay Zeka Şirket Skorlama özelliği sadece Premium Abonelere özeldir.")
 
         else: st.error("Veri çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması var.")
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- YENİ SAYFA: ZAMAN MAKİNESİ (DCA SİMÜLATÖRÜ) ---
+# --- SAYFA: ZAMAN MAKİNESİ (DCA SİMÜLATÖRÜ) ---
 elif sayfa == "⏳ Zaman Makinesi (DCA)":
     st.title("⏳ Zaman Makinesi (DCA Simülatörü)")
     st.markdown("Geçmişte yatırım yapsaydınız bugün neyiniz olurdu? Düzenli alım (Dolar/Maliyet Ortalaması) gücünü test edin.")
@@ -629,10 +664,8 @@ elif sayfa == "⏳ Zaman Makinesi (DCA)":
     if st.button("⏳ Simülasyonu Başlat"):
         with st.spinner("Zaman makinesi geçmişe gidiyor..."):
             try:
-                # Geçmiş veriyi çek
                 df_dca = yf.Ticker(dca_sembol).history(period=f"{dca_yil}y")
                 if not df_dca.empty and len(df_dca) > 20:
-                    # Aylık ilk işlem günlerini bul
                     df_aylik = df_dca.resample('MS').first().dropna()
                     
                     df_aylik['Yatirilan_Miktar'] = dca_aylik_miktar
@@ -653,7 +686,6 @@ elif sayfa == "⏳ Zaman Makinesi (DCA)":
                     c_s2.metric("Portföyün Bugünkü Değeri", f"{para_b}{son_deger:,.2f}", f"%{kar_orani:,.2f} Getiri")
                     c_s3.metric("Net Kâr", f"{para_b}{net_kar:,.2f}")
                     
-                    # Grafiği Çiz
                     fig_dca = go.Figure()
                     fig_dca.add_trace(go.Scatter(x=df_aylik.index, y=df_aylik['Toplam_Maliyet'], line=dict(color='gray', width=2, dash='dash'), name='Toplam Yatırılan Para'))
                     fig_dca.add_trace(go.Scatter(x=df_aylik.index, y=df_aylik['Guncel_Portfoy_Degeri'], line=dict(color='#00FFCC', width=3), fill='tozeroy', fillcolor='rgba(0, 255, 204, 0.1)', name='Portföy Değeri'))
@@ -1085,19 +1117,4 @@ elif sayfa == "💼 Portföyüm":
                             st.rerun()
                         st.markdown("---")
             else: st.info("Portföy boş.")
-        except Exception as e: st.error(f"Hata: {e}")
-    footer_ekle()
-
-# --- SAYFA: HESABIM & HAKKIMDA ---
-elif sayfa == "👤 Hesabım":
-    st.title("Profil ve Üyelik Yönetimi")
-    if st.session_state.kullanici:
-        st.markdown(f"**E-posta Adresi:** {st.session_state.kullanici}")
-        st.markdown(f"**Mevcut Paket:** {'💎 Premium' if is_premium else '👤 Ücretsiz'}")
-    else: st.warning("Giriş yapmalısınız.")
-    footer_ekle()
-
-elif sayfa == "📩 Hakkımda & İletişim":
-    st.title("👨‍💻 Geliştirici Hakkında")
-    st.markdown("**Vader Analiz Terminali**, Bursa Uludağ Üniversitesi İİBF öğrencisi **Yunus Emre Eriş** tarafından geliştirilmiştir.\n\nİletişim: yunusemreeris787@gmail.com")
-    footer_ekle()
+        except Exception as e: st.error(f"Hata: {
