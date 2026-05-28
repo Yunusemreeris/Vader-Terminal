@@ -69,7 +69,7 @@ if tum_cerezler is not None and st.session_state.kullanici is None:
 
 is_premium = True if (st.session_state.uyelik_tipi == "premium" or st.session_state.kullanici == "erisyunusemre985@gmail.com") else False
 
-# --- 4. YARDIMCI FONKSİYONLAR ---
+# --- 4. YARDIMCI FONKSİYONLAR VE AI SKORLAMA ---
 ingilizce_turkce_sozluk = {
     "Total Revenue": "Toplam Gelir (Satışlar)", "Operating Revenue": "Faaliyet Geliri",
     "Gross Profit": "Brüt Kar", "Net Income": "Net Kar", "Total Assets": "Toplam Varlıklar", 
@@ -87,6 +87,44 @@ def rakam_formatla(deger):
         elif abs(sayi) >= 1_000_000: return f"{sayi / 1_000_000:,.2f} Mly"
         else: return f"{sayi:,.2f}"
     except: return deger
+
+def gelismis_temel_analiz_skoru(info):
+    skorlar = {'Değerleme': 5, 'Kârlılık': 5, 'Büyüme': 5, 'Sağlık': 5, 'Temettü': 5}
+    
+    fk = info.get('trailingPE')
+    pddd = info.get('priceToBook')
+    fk_puan, pddd_puan = 5, 5
+    if fk: fk_puan = 10 if 0 < fk < 10 else (8 if 10 <= fk <= 15 else (5 if 15 < fk <= 25 else (0 if fk <= 0 else 2))) 
+    if pddd: pddd_puan = 10 if 0 < pddd < 1.5 else (8 if 1.5 <= pddd <= 3 else (5 if 3 < pddd <= 6 else (0 if pddd <= 0 else 2)))
+    skorlar['Değerleme'] = (fk_puan + pddd_puan) / 2
+
+    roe = info.get('returnOnEquity')
+    marj = info.get('profitMargins')
+    roe_puan, marj_puan = 5, 5
+    if roe: roe_puan = 10 if roe > 0.20 else (8 if roe > 0.10 else (4 if roe > 0 else 0))
+    if marj: marj_puan = 10 if marj > 0.15 else (8 if marj > 0.05 else (4 if marj > 0 else 0))
+    skorlar['Kârlılık'] = (roe_puan + marj_puan) / 2
+
+    cb = info.get('revenueGrowth')
+    kb = info.get('earningsGrowth')
+    cb_puan, kb_puan = 5, 5
+    if cb: cb_puan = 10 if cb > 0.20 else (8 if cb > 0.05 else (4 if cb > -0.05 else 0))
+    if kb: kb_puan = 10 if kb > 0.20 else (8 if kb > 0.05 else (4 if kb > -0.05 else 0))
+    skorlar['Büyüme'] = (cb_puan + kb_puan) / 2
+
+    co = info.get('currentRatio')
+    bo = info.get('debtToEquity')
+    co_puan, bo_puan = 5, 5
+    if co: co_puan = 10 if co > 1.5 else (7 if co > 1.0 else 2)
+    if bo: bo_puan = 10 if bo < 50 else (7 if bo < 100 else 2) 
+    skorlar['Sağlık'] = (co_puan + bo_puan) / 2
+
+    div = info.get('dividendYield')
+    if div: skorlar['Temettü'] = 10 if div > 0.04 else (8 if div > 0.02 else (5 if div > 0 else 2))
+    else: skorlar['Temettü'] = 2 
+
+    genel_skor = sum(skorlar.values()) / len(skorlar)
+    return skorlar, genel_skor
 
 @st.cache_data(ttl=300)
 def veri_motoru(sembol, p="2y", i="1d"):
@@ -300,10 +338,10 @@ if sayfa == "🏠 Ana Sayfa & Giriş":
         st.info("İzleme Listeniz ve Portföyünüz bulutla senkronize edildi.")
 
     st.markdown("### 📢 Duyurular")
-    st.warning("Temel analiz araçları tamamen ücretsizdir. Yapay zeka, Monte Carlo ve Portföy Korelasyon özellikleri Premium Abonelik gerektirir.")
+    st.warning("Temel analiz araçları tamamen ücretsizdir. Yapay zeka, Monte Carlo ve Şirket Skorlama özellikleri Premium Abonelik gerektirir.")
     footer_ekle()
 
-# --- SAYFA: CANLI ANALİZ VE GELİŞMİŞ MONTE CARLO ---
+# --- SAYFA: CANLI ANALİZ VE GELİŞMİŞ MONTE CARLO VE ŞİRKET KARNESİ ---
 elif sayfa == "📈 Canlı Analiz Terminali":
     hisse_kod = st.sidebar.text_input("Sembol (Örn: THYAO.IS, BTC-USD, AAPL):", "THYAO.IS").upper()
     sembol = hisse_kod
@@ -388,7 +426,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
             m3.metric("Haftalık Getiri", f"%{haftalik_getiri:.2f}", "Teknik Veri")
             m4.metric("Üyelik Seviyesi", "💎 Premium" if is_premium else "👤 Ücretsiz")
 
-            t1, t2, t3, t4, t5, t6, t7 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon v2.0 💎", "📰 Haberler", "📑 Finansallar", "💬 Vader AI 💎"])
+            t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs(["📈 Teknik Grafikler", "⚙️ Al-Sat Sinyalleri", "🤖 AI Teknik Röntgen", "🔮 Pro Simülasyon 💎", "📰 Haberler", "📑 Finansallar", "💬 Vader AI", "🕸️ Şirket Karnesi (Skor) 💎"])
             
             with t1:
                 goster_bollinger = st.checkbox("Bollinger Bantlarını Göster")
@@ -449,9 +487,8 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                 c2.metric("Peryodun En Düşük", f"{para_birimi}{dip_52:.2f}", f"Dipten Uzaklık: %{dibe_uzaklik:+.2f}")
                 c3.metric("Anlık Volatilite", f"{para_birimi}{df['Close'].tail(20).std():.2f}")
 
-            # --- GELİŞMİŞ MONTE CARLO v2.0 ---
             with t4: 
-                st.subheader("🔮 Gelişmiş Pro Monte Carlo Simülasyonu (Kurumsal Seviye)")
+                st.subheader("🔮 Gelişmiş Pro Monte Carlo Simülasyonu")
                 if is_premium:
                     st.markdown("Geometrik Brownian Hareketi (GBM) ile binlerce farklı paralel evren yaratarak gelecekteki olası fiyat dağılımını hesaplar.")
                     c_m1, c_m2 = st.columns(2)
@@ -466,7 +503,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             
                             sims = np.zeros((mc_gun, mc_senaryo))
                             sims[0] = fiyat
-                            np.random.seed(42) # Sabit sonuçlar için, istenirse kaldırılabilir
+                            np.random.seed(42)
                             
                             for t in range(1, mc_gun): 
                                 sims[t] = sims[t - 1] * np.exp(drift + stdev * np.random.standard_normal(mc_senaryo))
@@ -477,7 +514,6 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             tarihler = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=mc_gun)
                             
                             fig_mc = go.Figure()
-                            # Sadece 20 rastgele senaryoyu ince arka plan çizgisi olarak çiz (Tarayıcı çökmesin diye)
                             for i in range(min(20, mc_senaryo)):
                                 fig_mc.add_trace(go.Scatter(x=tarihler, y=sims[:, i], line=dict(color='rgba(255,255,255,0.05)', width=1), showlegend=False))
                                 
@@ -488,10 +524,9 @@ elif sayfa == "📈 Canlı Analiz Terminali":
                             fig_mc.update_layout(template=tema, height=450, hovermode="x unified", title=f"{mc_gun} Günlük Gelecek Projeksiyonu")
                             st.plotly_chart(fig_mc, use_container_width=True)
                             
-                            # İstatistiksel Sonuçlar ve VaR (Value at Risk)
                             son_gun_fiyatlari = sims[-1, :]
                             beklenen_fiyat = np.median(son_gun_fiyatlari)
-                            var_95 = np.percentile(son_gun_fiyatlari, 5) # %5 en kötü ihtimal
+                            var_95 = np.percentile(son_gun_fiyatlari, 5)
                             maks_potansiyel = np.max(son_gun_fiyatlari)
                             
                             st.markdown("### 📊 Simülasyon İstatistikleri")
@@ -530,15 +565,52 @@ elif sayfa == "📈 Canlı Analiz Terminali":
 
             with t7: 
                 st.subheader(f"🧠 Vader AI - {hisse_kod} Özel Asistanı")
+                st.markdown("Bana hissenin güncel durumu hakkında teknik sorular sorabilirsin.")
+                k_s = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hissenin grafiği nasıl, yönü ne?")
+                if st.button("Analiz Et"):
+                    cevap = f"**Vader'ın Teknik Analizi:**\n\n- Hissenin anlık RSI puanı **{anlik_rsi:.2f}**.\n"
+                    cevap += "- 🚨 Aşırı Alım bölgesinde! Riskli.\n" if anlik_rsi > 70 else ("- 🟢 Aşırı Satım bölgesinde! Ucuz.\n" if anlik_rsi < 30 else "- ⚪ Hisse şu an nötr bölgede.\n")
+                    cevap += "- Kısa vadeli MACD sinyali AL veriyor.\n" if anlik_macd > anlik_signal else "- Kısa vadeli MACD sinyali SAT veriyor.\n"
+                    st.info(cevap)
+
+            # --- YENİ EKLENTİ: ŞİRKET KARNESİ (SKORLAMA RADARI) ---
+            with t8:
+                st.subheader("🕸️ Vader AI Şirket Karnesi")
                 if is_premium:
-                    st.markdown("Bana hissenin güncel durumu hakkında teknik sorular sorabilirsin.")
-                    k_s = st.text_input("Vader'a Sor:", placeholder="Örn: Bu hissenin grafiği nasıl, yönü ne?")
-                    if st.button("Analiz Et"):
-                        cevap = f"**Vader'ın Teknik Analizi:**\n\n- Hissenin anlık RSI puanı **{anlik_rsi:.2f}**.\n"
-                        cevap += "- 🚨 Aşırı Alım bölgesinde! Riskli.\n" if anlik_rsi > 70 else ("- 🟢 Aşırı Satım bölgesinde! Ucuz.\n" if anlik_rsi < 30 else "- ⚪ Hisse şu an nötr bölgede.\n")
-                        cevap += "- Kısa vadeli MACD sinyali AL veriyor.\n" if anlik_macd > anlik_signal else "- Kısa vadeli MACD sinyali SAT veriyor.\n"
-                        st.info(cevap)
-                else: st.error("🔒 Vader AI Asistanı sadece Premium Abonelere özeldir.")
+                    st.markdown("Şirketin değerleme, kârlılık, büyüme, finansal sağlık ve temettü verilerini inceler. **Kusursuz şirket 10 üzerinden 10 alır.**")
+                    with st.spinner("Bilanço taranıyor, mali tablolar analiz ediliyor..."):
+                        skor_dict, genel_skor = gelismis_temel_analiz_skoru(info)
+                        
+                        col_k1, col_k2 = st.columns([1, 2])
+                        with col_k1:
+                            st.markdown(f"### Genel Skor: **{genel_skor}/10**")
+                            if genel_skor >= 8: st.success("🟢 Güçlü Temel! Uzun vade için oldukça güvenli bir liman.")
+                            elif genel_skor >= 6: st.info("🟡 Kabul Edilebilir. Kendi sektörüne göre incelenmeli.")
+                            else: st.error("🔴 Zayıf Temel! Temel verilerde ciddi kırmızı bayraklar var.")
+                            
+                            st.markdown("---")
+                            for metrik, puan in skor_dict.items():
+                                st.write(f"**{metrik}:** {puan}/10")
+                                
+                        with col_k2:
+                            fig_radar = go.Figure(data=go.Scatterpolar(
+                                r=list(skor_dict.values()),
+                                theta=list(skor_dict.keys()),
+                                fill='toself',
+                                marker=dict(color='#00FFCC'),
+                                line=dict(color='#00FFCC')
+                            ))
+                            fig_radar.update_layout(
+                                polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
+                                showlegend=False,
+                                template="plotly_dark",
+                                height=400,
+                                margin=dict(l=40, r=40, t=20, b=20)
+                            )
+                            st.plotly_chart(fig_radar, use_container_width=True)
+                            
+                        st.info("💡 **Not:** Puanlamada negatif büyüme veya eksi (-F/K) durumları acımasızca **0** ile cezalandırılır. Grafiğin merkeze çöktüğü alanlar şirketin en zayıf karnıdır.")
+                else: st.error("🔒 Yapay Zeka Şirket Skorlama özelliği sadece Premium Abonelere özeldir.")
 
         else: st.error("Veri çekilemedi. Hatalı kod girdiniz veya Yahoo kısıtlaması var.")
     except Exception as e: st.error(f"Sistem Hatası: {e}")
