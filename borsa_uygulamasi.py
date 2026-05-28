@@ -514,7 +514,7 @@ elif sayfa == "📈 Canlı Analiz Terminali":
     except Exception as e: st.error(f"Sistem Hatası: {e}")
     footer_ekle()
 
-# --- SAYFA: PİYASA HABERLERİ & SESLİ BRİFİNG ---
+# --- SAYFA: PİYASA HABERLERİ & DİNAMİK SESLİ BRİFİNG ---
 elif sayfa == "📰 Piyasa Haberleri":
     st.title("📰 Piyasa Haber Merkezi & AI Brifing")
     st.markdown("Global piyasaların nabzını ve yapay zeka destekli güncel sesli özetleri takip edin.")
@@ -570,26 +570,62 @@ elif sayfa == "📰 Piyasa Haberleri":
             
     with tab_podcast:
         st.subheader("🎧 Vader Günlük Sesli Piyasa Özeti")
-        st.markdown("Microsoft Edge Neural TTS altyapısı ile hazırlanan ultra gerçekçi sesli brifing.")
+        st.markdown("Yapay zeka; güncel haberleri ve piyasada en çok hareket eden TOP 10 hisseyi (5 Artan, 5 Düşen) sizin için derleyip okur.")
         
         if st.button("🎙️ Bugünkü Podcast'i Oluştur"):
             if not HAS_EDGE_TTS:
                 st.error("⚠️ Ses motoru eksik! Lütfen GitHub'daki 'requirements.txt' dosyasına 'edge-tts' ekleyip kaydedin.")
             else:
-                with st.spinner("Vader stüdyoya girdi, kayıt alınıyor... (Bu işlem 5-10 saniye sürebilir)"):
+                with st.spinner("Vader piyasayı tarayıp stüdyoya giriyor... (Veri çekimi 10-15 saniye sürebilir)"):
                     try:
-                        # Spiker metni
-                        metin = "Vader analiz terminaline hoş geldiniz patron. Bugün piyasalarda oldukça hareketli bir gün yaşanıyor. Lütfen risk yönetiminizi yapmayı unutmayın ve balina radarlarını düzenli olarak kontrol edin. Bol kazançlar dilerim, güç sizinle olsun."
+                        # 1. Haberleri Çek ve Temizle
+                        g_haberler = genel_piyasa_haberleri()
+                        haber_metni = "Bugün için önemli bir haber akışı bulunmuyor."
+                        if g_haberler:
+                            # Sadece ilk 4 haberi al ve gazete isimlerini (" - Habertürk" vb.) kırp
+                            basliklar = [h.get('title', '').split(' - ')[0] for h in g_haberler[:4]]
+                            haber_metni = "Günün öne çıkan önemli gelişmeleri şöyle. " + ". ".join(basliklar) + "."
+                            
+                        # 2. BİST Hisselerini Tara (Hızlı tarama için ana hisseler)
+                        ana_hisseler = ["THYAO.IS", "SASA.IS", "EREGL.IS", "TUPRS.IS", "FROTO.IS", "AKBNK.IS", "ISCTR.IS", "YKBNK.IS", "KCHOL.IS", "SAHOL.IS", "ASELS.IS", "BIMAS.IS", "SISE.IS", "TOASO.IS", "PGSUS.IS", "ENKAI.IS", "GARAN.IS", "TCELL.IS", "KRDMD.IS", "PETKM.IS", "ASTOR.IS", "HEKTS.IS"]
+                        degisimler = {}
+                        
+                        for s in ana_hisseler:
+                            try:
+                                hist = yf.Ticker(s).history(period="5d")
+                                if len(hist) >= 2:
+                                    son = float(hist['Close'].iloc[-1])
+                                    eski = float(hist['Close'].iloc[-2])
+                                    yuzde = ((son - eski) / eski) * 100
+                                    degisimler[s.replace('.IS', '')] = yuzde
+                            except: pass
+                            
+                        piyasa_metni = ""
+                        if degisimler:
+                            # Sırala ve Top 5'leri al
+                            sirali = sorted(degisimler.items(), key=lambda x: x[1], reverse=True)
+                            en_cok_artanlar = sirali[:5]
+                            en_cok_dusenler = sirali[-5:]
+                            
+                            piyasa_metni = "Piyasada en çok dikkat çeken on hisseye gelirsek. En çok kazandıran beş hisse sırasıyla; "
+                            for h, y in en_cok_artanlar:
+                                piyasa_metni += f"yüzde {y:.1f} artışla {h}, "
+                                
+                            piyasa_metni += ". En çok kaybettiren beş hisse ise; "
+                            for h, y in en_cok_dusenler:
+                                piyasa_metni += f"yüzde {abs(y):.1f} düşüşle {h}, "
+                                
+                        # 3. Nihai Metni Oluştur
+                        metin = f"Vader analiz terminaline hoş geldiniz patron. {haber_metni} {piyasa_metni} Benim analizlerim şimdilik bu kadar. Lütfen risk yönetiminizi yapmayı unutmayın. Bol kazançlar dilerim."
                         
                         ses_dosyasi = "vader_brifing.mp3"
                         
-                        # Edge-TTS Asenkron Çalıştırma Fonksiyonu
+                        # Edge-TTS Asenkron Çalıştırma (Hızlandırılmış ve Profesyonel Ses)
                         async def ses_olustur():
-                            # tr-TR-AhmetNeural gerçekçi ve profesyonel bir erkek sesidir
-                            communicate = edge_tts.Communicate(metin, "tr-TR-AhmetNeural")
+                            # AhmetNeural sesi, rate="+10%" ile biraz daha dinamik ve hızlı okunur
+                            communicate = edge_tts.Communicate(metin, "tr-TR-AhmetNeural", rate="+10%")
                             await communicate.save(ses_dosyasi)
                         
-                        # Streamlit içinde güvenli asenkron çalıştırma taktiği
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         loop.run_until_complete(ses_olustur())
